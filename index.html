@@ -53,6 +53,7 @@ label.lb{display:block;font-size:.78rem;color:var(--mu);margin:12px 0 5px}
 .cs{color:var(--mu);font-size:.75rem;margin:-6px 0 12px}
 .big{font:400 1.5rem Georgia,"Times New Roman",serif}
 .qt{border-left:3px solid var(--ac);padding:2px 0 2px 12px;margin:6px 0;white-space:pre-wrap;font-family:Georgia,serif;line-height:1.6}
+.btn:disabled{opacity:.4;cursor:default}
 </style>
 </head>
 <body>
@@ -146,7 +147,10 @@ function gok(g,d){var n=gnum(g,d);return g.type=="max"?n<=g.target:n>=g.target}
 function gfrac(g,d){var n=gnum(g,d);return g.type=="max"?(n<=g.target?1:0):Math.min(1,n/g.target)}
 function active(g,d){return g.days.indexOf(new Date(d+"T12:00:00").getDay())>=0}
 function pctDay(d){var a=S.goals.filter(function(g){return active(g,d)});if(!a.length)return 0;return Math.round(100*a.reduce(function(s,g){return s+gfrac(g,d)},0)/a.length)}
-function setG(id,v){var d=today();S.log[d]=S.log[d]||{};S.log[d][id]=v;save();render()}
+function r2(n){return Math.round(n*100)/100}
+function fmtN(n){return String(r2(n)).replace(".",",")}
+function num(v){return Number(String(v).replace(",","."))||0}
+function setG(id,v){var d=today(),g=gOf(id);if(typeof v=="number"){v=Math.max(0,r2(v));if(g&&g.type!="max")v=Math.min(v,g.target)}S.log[d]=S.log[d]||{};S.log[d][id]=v;save();render()}
 function incG(id,n){setG(id,Math.max(0,gnum(gOf(id),today())+n))}
 function togG(id){setG(id,gval(today(),id)?0:1)}
 function togItem(id,i){var a=gval(today(),id);a=Array.isArray(a)?a.slice():[];var k=a.indexOf(i);if(k<0)a.push(i);else a.splice(k,1);setG(id,a)}
@@ -171,13 +175,21 @@ function saveGoal(){
   if(g.id)S.goals=S.goals.map(function(x){return x.id==g.id?g:x});else{g.id=uid();S.goals.push(g)}
   G=null;save();render();
 }
+var UNITS=[["L","Litros (L)",0.25],["ml","Mililitros (ml)",100],["km","Quilômetros (km)",0.5],["m","Metros (m)",100],["kg","Quilos (kg)",0.5],["g","Gramas (g)",50],["h","Horas (h)",0.5],["kcal","Calorias (kcal)",50],["R$","Reais (R$)",10],["páginas","Páginas",1],["copos","Copos",1],["passos","Passos",500],["vezes","Vezes",1]];
+function isPreset(u){return UNITS.some(function(x){return x[0]==u})}
+function setUnit(v){if(v=="__outra"){G.unitCustom=true;G.unit=""}else{G.unitCustom=false;G.unit=v;var p=UNITS.find(function(x){return x[0]==v});if(p)G.step=p[2]}render()}
+function unitForm(T){
+  var cust=G.unitCustom||(G.unit&&!isPreset(G.unit)),sel=cust?"__outra":G.unit;
+  var o='<option value=""'+(sel==""?" selected":"")+'>Sem unidade</option>'+UNITS.map(function(x){return '<option value="'+x[0]+'"'+(sel==x[0]?" selected":"")+'>'+x[1]+'</option>'}).join("")+'<option value="__outra"'+(cust?" selected":"")+'>Outra…</option>';
+  return '<div class="row">'+fld(T=="max"?"Limite por dia":"Meta por dia",'<input type="number" step="any" min="0" value="'+esc(G.target)+'" style="width:110px" oninput="G.target=this.value">')+fld("Unidade",'<select onchange="setUnit(this.value)">'+o+'</select>')+(cust?fld("Nome da unidade",'<input value="'+esc(G.unit)+'" placeholder="Ex.: sessões" style="width:140px" oninput="G.unit=this.value">'):"")+fld("Passo dos botões +/−",'<input type="number" step="any" min="0" value="'+esc(G.step)+'" style="width:100px" oninput="G.step=this.value">')+'</div><div class="mu" style="margin-top:6px">Aceita decimais, como 2,5 (digite 2.5 se o campo pedir ponto).</div>';
+}
 function fld(l,i){return '<div><label class="lb">'+l+'</label>'+i+'</div>'}
 function dayTxt(d){var s=d.join();return d.length==7?"Todos os dias":s=="1,2,3,4,5"?"Dias úteis":s=="0,6"?"Fins de semana":d.map(function(i){return DN[i]}).join(", ")}
 function goalDesc(g){
   if(g.type=="sim")return "Feito / não feito";
   if(g.type=="lista")return "Checklist de "+g.items.length+" itens";
   var u=g.type=="tempo"?"min":g.unit;
-  return (g.type=="max"?"Máximo de ":"Meta: ")+g.target+" "+u+" por dia";
+  return (g.type=="max"?"Máximo de ":"Meta: ")+fmtN(g.target)+" "+u+" por dia";
 }
 function vMetas(){
   if(!G)newDraft();
@@ -186,7 +198,7 @@ function vMetas(){
   h+='</div><div class="row">'+fld("Ícone",'<input value="'+esc(G.emoji)+'" style="width:64px;text-align:center" oninput="G.emoji=this.value">')+'<div style="flex:1;min-width:180px">'+fld("Nome da meta",'<input class="grow" style="width:100%" value="'+esc(G.name)+'" placeholder="Ex.: Ler, Beber água, Estudar inglês" oninput="G.name=this.value">')+'</div></div>';
   h+='<label class="lb">Ícones rápidos</label><div class="row">'+EMOJIS.map(function(e){return '<button class="chip" onclick="setEmo(\''+e+'\')">'+e+'</button>'}).join("")+'</div>';
   h+='<label class="lb">Cor</label><div class="row">'+COLORS.map(function(c){return '<button class="sw'+(c==G.color?" on":"")+'" aria-label="Cor" style="background:'+c+'" onclick="setCol(\''+c+'\')"></button>'}).join("")+'</div>';
-  if(T=="quant"||T=="max")h+='<div class="row">'+fld(T=="max"?"Limite por dia":"Meta por dia",'<input type="number" min="1" value="'+esc(G.target)+'" style="width:110px" oninput="G.target=this.value">')+fld("Unidade",'<input value="'+esc(G.unit)+'" placeholder="páginas, copos…" style="width:170px" oninput="G.unit=this.value">')+fld("Passo dos botões +/−",'<input type="number" min="1" value="'+esc(G.step)+'" style="width:90px" oninput="G.step=this.value">')+'</div>';
+  if(T=="quant"||T=="max")h+=unitForm(T);
   if(T=="tempo")h+='<div class="row">'+fld("Meta por dia (minutos)",'<input type="number" min="1" value="'+esc(G.target)+'" style="width:130px" oninput="G.target=this.value">')+fld("Passo dos botões",'<select onchange="G.step=this.value">'+[5,10,15,30,60].map(function(n){return '<option'+(n==G.step?" selected":"")+'>'+n+'</option>'}).join("")+'</select>')+'</div>';
   if(T=="lista")h+=fld("Itens do checklist (um por linha)",'<textarea placeholder="Arrumar a cama&#10;Revisar a agenda&#10;Ler 10 páginas" oninput="G.items=this.value.split(\'\\n\').map(function(x){return x.trim()}).filter(Boolean)">'+esc(G.items.join("\n"))+'</textarea>');
   h+='<label class="lb">Dias da semana</label><div class="row">'+DN.map(function(n,i){return '<button class="chip'+(G.days.indexOf(i)>=0?" on":"")+'" onclick="togDay('+i+')">'+n+'</button>'}).join("")+'<button class="chip" onclick="setDays([0,1,2,3,4,5,6])">Todos</button><button class="chip" onclick="setDays([1,2,3,4,5])">Úteis</button><button class="chip" onclick="setDays([0,6])">Fim de semana</button></div>';
@@ -201,11 +213,11 @@ function todayGoals(t){
   if(!a.length)return '<div class="empty">'+(S.goals.length?"Nenhuma meta para hoje.":"Crie metas na aba Metas.")+'</div>';
   return a.map(function(g){
     var n=gnum(g,t),p=Math.min(100,Math.round(100*n/g.target)),over=g.type=="max"&&n>g.target,ok=gok(g,t),u=g.type=="tempo"?"min":g.unit,id="'"+g.id+"'";
-    var st=g.type=="sim"?(n?"Feito":"Pendente"):(g.type=="max"?n+" / máx. "+g.target:n+" / "+g.target)+" "+esc(u);
+    var st=g.type=="sim"?(n?"Feito":"Pendente"):(g.type=="max"?fmtN(n)+" / máx. "+fmtN(g.target):fmtN(n)+" / "+fmtN(g.target))+" "+esc(u);
     var h='<div style="margin-bottom:16px"><div class="row" style="justify-content:space-between"><b><span style="color:'+g.color+'">'+esc(g.emoji)+'</span> '+esc(g.name)+'</b><span class="mu">'+st+'</span></div><div class="bar"><i style="width:'+p+'%;background:'+(over?"var(--dg)":ok?"var(--ok)":g.color)+'"></i></div>';
     if(g.type=="sim")h+='<button class="btn'+(n?" g":"")+'" onclick="togG('+id+')">'+(n?"Desmarcar":"Marcar como feito")+'</button>';
     else if(g.type=="lista"){var v=gval(t,g.id);v=Array.isArray(v)?v:[];h+=g.items.map(function(it,i){return '<label class="item" style="padding:6px 0"><input type="checkbox" '+(v.indexOf(i)>=0?"checked":"")+' onchange="togItem('+id+','+i+')"><span class="t">'+esc(it)+'</span></label>'}).join("")}
-    else h+='<div class="row"><button class="btn g" onclick="incG('+id+',-'+g.step+')">−'+g.step+'</button><button class="btn g" onclick="incG('+id+','+g.step+')">+'+g.step+'</button><input type="number" min="0" value="'+n+'" style="width:80px" onchange="setG('+id+',Math.max(0,Number(this.value)||0))"></div>';
+    else{var cap=g.type!="max",st2=fmtN(g.step);h+='<div class="row"><button class="btn g" '+(n<=0?"disabled":"")+' onclick="incG('+id+',-'+g.step+')">−'+st2+'</button><button class="btn g" '+(cap&&n>=g.target?"disabled":"")+' onclick="incG('+id+','+g.step+')">+'+st2+'</button><input type="number" step="any" min="0"'+(cap?' max="'+g.target+'"':"")+' value="'+r2(n)+'" style="width:90px" onchange="setG('+id+',num(this.value))"></div>'+(cap&&n>=g.target?'<div class="mu" style="margin-top:6px">Meta de hoje concluída ✓</div>':"")+(over?'<div class="mu" style="margin-top:6px;color:var(--dg)">Você passou do limite de hoje</div>':"")}
     return h+'</div>';
   }).join("");
 }
