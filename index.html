@@ -54,20 +54,50 @@ label.lb{display:block;font-size:.78rem;color:var(--mu);margin:12px 0 5px}
 .big{font:400 1.5rem Georgia,"Times New Roman",serif}
 .qt{border-left:3px solid var(--ac);padding:2px 0 2px 12px;margin:6px 0;white-space:pre-wrap;font-family:Georgia,serif;line-height:1.6}
 .btn:disabled{opacity:.4;cursor:default}
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.avbtn{background:none;border:0;padding:0;cursor:pointer;margin-top:6px;flex:none}
+.av{border-radius:50%;object-fit:cover;background:var(--card2);display:inline-block;text-align:center;color:var(--ac);font-weight:600;flex:none;border:1px solid var(--bd)}
+.ph{max-width:100%;max-height:420px;border-radius:12px;margin-top:8px;display:block}
+details>summary{font-weight:600}
+#bnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:15;background:rgba(14,13,12,.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--bd);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
+#bnav button{flex:1;background:none;border:0;color:var(--mu);font:inherit;font-size:.68rem;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0;cursor:pointer}
+#bnav button i{font-style:normal;font-size:1.35rem;line-height:1}
+#bnav button.on{color:var(--ac)}
+html{-webkit-text-size-adjust:100%}button{-webkit-tap-highlight-color:transparent}
+@media(max-width:720px){
+ #nav{display:none}
+ #bnav{display:flex}
+ .wrap{padding:12px 12px 100px}
+ h1{font-size:1.7rem}
+ input,select,textarea{font-size:16px}
+ .btn,.chip{min-height:40px}
+ .card{padding:14px;border-radius:14px}
+ .grid{grid-template-columns:1fr}
+ .row>input.grow,.row>div{min-width:0}
+}
 </style>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Planner">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
 </head>
 <body>
 <div class="wrap">
-  <h1>Meu Planner</h1>
-  <p class="sub" id="hoje"></p>
+  <div class="topbar"><div><h1>Meu Planner</h1><p class="sub" id="hoje"></p></div><button id="avb" class="avbtn" aria-label="Perfil" onclick="go('perfil')"></button></div>
   <div class="cs" id="cs"></div>
   <nav id="nav"></nav>
   <main id="main"></main>
 </div>
+<div id="bnav"></div>
 <div id="modal"><div class="bar2"><b id="mt"></b><button class="btn g" onclick="closePdf()">Fechar</button></div><iframe id="mf"></iframe></div>
 
 <script>
-var TABS=[["home","Hoje"],["metas","Metas"],["tarefas","Tarefas"],["agenda","Compromissos"],["diario","Diário"],["livros","Leitura"]];
+var SUPA=window.SUPA_CONFIG||{url:"",key:""};
+var TABS=[["home","Hoje"],["metas","Metas"],["tarefas","Tarefas"],["agenda","Compromissos"],["diario","Diário"],["livros","Leitura"],["grupo","Grupo"],["perfil","Perfil"]];
 var tab="home";
 var S={goals:[],log:{},tasks:[],events:[],diary:[],books:[]};
 try{var raw=localStorage.getItem("planner_v1");if(raw)S=Object.assign(S,JSON.parse(raw))}catch(e){}
@@ -84,11 +114,14 @@ var dbp=null;
 function idb(){if(dbp)return dbp;dbp=new Promise(function(ok,no){var r=indexedDB.open("planner_pdfs",1);r.onupgradeneeded=function(){r.result.createObjectStore("pdfs")};r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)}});return dbp}
 function tx(mode,fn){return idb().then(function(db){return new Promise(function(ok,no){var t=db.transaction("pdfs",mode),q=fn(t.objectStore("pdfs"));t.oncomplete=function(){ok(q&&q.result)};t.onerror=function(){no(t.error)}})})}
 
-function go(t){tab=t;render()}
+function go(t){tab=t;render();window.scrollTo(0,0);if(t=="grupo"&&cloud.sb&&cuid)loadGroups()}
 function render(){
   $("hoje").textContent=new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   $("nav").innerHTML=TABS.map(function(t){return '<button class="'+(t[0]==tab?"on":"")+'" onclick="go(\''+t[0]+'\')">'+t[1]+'</button>'}).join("");
-  var v={home:vHome,metas:vMetas,tarefas:vTarefas,agenda:vAgenda,diario:vDiario,livros:vLivros}[tab];
+  var mais=["mais","tarefas","agenda","diario","perfil"].indexOf(tab)>=0;
+  $("bnav").innerHTML=BN.map(function(b){var on=b[0]=="mais"?mais:b[0]==tab;return '<button class="'+(on?"on":"")+'" onclick="go(\''+b[0]+'\')"><i>'+b[1]+'</i>'+b[2]+'</button>'}).join("");
+  $("avb").innerHTML=av(S.profile,40);
+  var v={home:vHome,metas:vMetas,tarefas:vTarefas,agenda:vAgenda,diario:vDiario,livros:vLivros,grupo:vGrupo,perfil:vPerfil,mais:vMais}[tab];
   $("main").innerHTML=v();
 }
 
@@ -100,7 +133,7 @@ function softRender(){if(!typing())render()}
 function cloudPush(){
   if(!cloud.ref){return}
   setStatus("wait");clearTimeout(cloud.t);
-  cloud.t=setTimeout(function(){cloud.ref.set({json:JSON.stringify(S),rev:S.rev}).then(function(){setStatus("sync")}).catch(function(){setStatus("err")})},700);
+  cloud.t=setTimeout(function(){cloud.ref.set({json:JSON.stringify(S),rev:S.rev}).then(function(){setStatus("sync");if(cloud.pushProfile)cloud.pushProfile().catch(function(){})}).catch(function(){setStatus("err")})},700);
 }
 function adopt(d){
   var r=JSON.parse(d.json);
@@ -111,7 +144,7 @@ function adopt(d){
 async function initSync(){
   S.goals=S.goals.map(norm);setStatus("local");try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
   try{
-    if(!window.claude||!claude.use)return;
+    if(!window.claude||!claude.use){await initSupa();return}
     var user=await claude.use("user"),db=await claude.use("db");
     cloud.assets=await claude.use("assets");
     if(!user||!db)return;
@@ -319,6 +352,7 @@ function delBook(id){
 }
 function openPdf(id){
   var b=bookOf(id),pg="#page="+(b.cur||1);$("mt").textContent=b.title;
+  if(b.asset&&cloud.urlFor){cloud.urlFor(b.asset).then(function(u){$("mf").src=u+pg;$("modal").className="on"}).catch(function(){alert("Não consegui abrir o PDF.")});return}
   if(b.asset){$("mf").src="/_blob/"+b.asset+pg;$("modal").className="on";return}
   tx("readonly",function(s){return s.get(id)}).then(function(blob){if(!blob){alert("Arquivo não encontrado neste dispositivo.");return}curUrl=URL.createObjectURL(blob);$("mf").src=curUrl+pg;$("modal").className="on"});
 }
@@ -358,6 +392,214 @@ function vBook(id){
   }
   h+='<div class="card"><h2>Resenha</h2><textarea placeholder="O que você achou do livro? Principais aprendizados..." onchange="setB('+I+',\'review\',this.value)">'+esc(b.review)+'</textarea></div>';
   return h;
+}
+
+/* ---------- Conta (Supabase) ---------- */
+var cuid=null;
+function resetLocal(){S={goals:[],log:{},tasks:[],events:[],diary:[],books:[]};try{localStorage.removeItem("planner_v1");localStorage.removeItem("planner_uid")}catch(e){}}
+async function initSupa(){
+  if(!SUPA.url||!SUPA.key||!window.supabase)return;
+  var sb=cloud.sb=supabase.createClient(SUPA.url,SUPA.key);
+  sb.auth.onAuthStateChange(function(ev,ses){setTimeout(function(){attach(ses)},0)});
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState=="visible"&&tab=="grupo"&&cuid)loadGroups();
+    if(document.visibilityState=="visible"&&cloud.ref)cloud.ref.get().then(function(s){var d=s.exists?s.data():null;if(d&&d.rev>(S.rev||0))adopt(d)}).catch(function(){});
+  });
+}
+async function attach(ses){
+  var sb=cloud.sb;
+  if(!ses){
+    if(cuid)resetLocal();
+    cuid=null;cloud.ref=null;cloud.assets=null;cloud.urlFor=null;cloud.email=null;cloud.pushProfile=null;
+    if(GS.ch)sb.removeChannel(GS.ch);GS={groups:[],cur:null,members:[],profs:{},posts:[],urls:{},ch:null,loaded:false};
+    if(cloud.ch){sb.removeChannel(cloud.ch);cloud.ch=null}
+    setStatus("local");softRender();return;
+  }
+  var me=ses.user.id;if(cuid==me)return;
+  cuid=me;cloud.email=ses.user.email;
+  try{var last=localStorage.getItem("planner_uid");if(last&&last!=me)resetLocal();localStorage.setItem("planner_uid",me)}catch(e){}
+  cloud.ref={
+    set:function(o){return sb.from("planner_state").upsert({user_id:me,data:JSON.parse(o.json),rev:o.rev,updated_at:new Date().toISOString()}).then(function(r){if(r.error)throw r.error})},
+    get:function(){return sb.from("planner_state").select("data,rev").eq("user_id",me).maybeSingle().then(function(r){if(r.error)throw r.error;var d=r.data;return {exists:!!d,data:function(){return d?{json:JSON.stringify(d.data),rev:Number(d.rev)}:null}}})}
+  };
+  cloud.assets={
+    upload:async function(f){var path=me+"/"+uid()+".pdf",r=await sb.storage.from("pdfs").upload(path,f,{contentType:"application/pdf"});if(r.error)throw r.error;return {id:path}},
+    delete:function(path){return sb.storage.from("pdfs").remove([path])}
+  };
+  cloud.pushProfile=function(){var pr=S.profile||{};return sb.from("profiles").upsert({user_id:me,name:pr.name||"",avatar:pr.avatar||"",stats:myStats(),updated_at:new Date().toISOString()}).then(function(r){if(r.error)throw r.error})};
+  cloud.urlFor=async function(path){var r=await sb.storage.from("pdfs").createSignedUrl(path,3600);if(r.error)throw r.error;return r.data.signedUrl};
+  try{
+    setStatus("wait");
+    var snap=await cloud.ref.get(),d=snap.exists?snap.data():null;
+    if(d&&d.rev>(S.rev||0))adopt(d);else if(!d||d.rev<(S.rev||0))cloudPush();
+    setStatus("sync");
+  }catch(e){setStatus("err")}
+  cloud.ch=sb.channel("ps-"+me).on("postgres_changes",{event:"*",schema:"public",table:"planner_state",filter:"user_id=eq."+me},function(p){var d=p.new;if(d&&Number(d.rev)>(S.rev||0))adopt({json:JSON.stringify(d.data),rev:Number(d.rev)})}).subscribe();
+  var md=ses.user.user_metadata||{},gn=md.full_name||md.name;
+  if(gn&&!(S.profile&&S.profile.name)){S.profile=S.profile||{};S.profile.name=gn;save()}
+  cloud.pushProfile().catch(function(){});if(tab=="grupo")loadGroups();
+  migratePdfs();softRender();
+}
+async function doLogin(signup){
+  var e=$("ae").value.trim(),p=$("ap").value;
+  if(!e||p.length<6){alert("Informe o e-mail e uma senha de pelo menos 6 caracteres.");return}
+  var r=signup?await cloud.sb.auth.signUp({email:e,password:p}):await cloud.sb.auth.signInWithPassword({email:e,password:p});
+  if(r.error){alert(r.error.message);return}
+  if(signup&&!(r.data&&r.data.session))alert("Conta criada! Confirme o e-mail que enviamos e depois entre.");
+}
+async function doMagic(){
+  var e=$("ae").value.trim();if(!e){alert("Informe o e-mail.");return}
+  var r=await cloud.sb.auth.signInWithOtp({email:e,options:{emailRedirectTo:location.origin+location.pathname}});
+  alert(r.error?r.error.message:"Enviamos um link de acesso para o seu e-mail.");
+}
+async function doGoogle(){
+  var r=await cloud.sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+location.pathname}});
+  if(r.error)alert(r.error.message);
+}
+async function doLogout(){await cloud.sb.auth.signOut()}
+function accountCard(){
+  if(!SUPA.url||!cloud.sb)return "";
+  if(cloud.email)return '<div class="card"><h2>Conta</h2><div class="row" style="justify-content:space-between"><div>Conectado como <b>'+esc(cloud.email)+'</b><div class="mu">Seu progresso é salvo automaticamente na sua conta.</div></div><button class="btn g" onclick="doLogout()">Sair</button></div></div>';
+  return '<div class="card"><h2>Entrar para salvar na nuvem</h2><p class="mu" style="margin:0 0 10px">Entre com seu e-mail para salvar o progresso e acessar de qualquer dispositivo. O que já está neste aparelho sobe para a sua conta.</p><div class="row"><button class="btn" onclick="doGoogle()"><b>G</b>&nbsp; Entrar com Google</button></div><div class="mu" style="margin:12px 0 8px">ou use seu e-mail:</div><div class="row"><input id="ae" type="email" placeholder="E-mail" class="grow" autocomplete="email"><input id="ap" type="password" placeholder="Senha (mín. 6)" autocomplete="current-password" style="width:170px"></div><div class="row" style="margin-top:10px"><button class="btn" onclick="doLogin(false)">Entrar</button><button class="btn g" onclick="doLogin(true)">Criar conta</button><button class="btn g" onclick="doMagic()">Receber link por e-mail</button></div></div>';
+}
+
+/* ---------- Perfil, grupos e mobile ---------- */
+var GS={groups:[],cur:null,members:[],profs:{},posts:[],urls:{},ch:null,loaded:false};
+var BN=[["home","🏠","Hoje"],["metas","🎯","Metas"],["grupo","👥","Grupo"],["livros","📚","Leitura"],["mais","☰","Mais"]];
+function imgCanvas(file,max,square){
+  return new Promise(function(ok,no){
+    var r=new FileReader();
+    r.onerror=no;
+    r.onload=function(){var im=new Image();im.onerror=no;im.onload=function(){
+      var w=im.width,h=im.height,sx=0,sy=0,sw=w,sh=h,c=document.createElement("canvas");
+      if(square){var m=Math.min(w,h);sx=(w-m)/2;sy=(h-m)/2;sw=sh=m;c.width=c.height=max}
+      else{var k=Math.min(1,max/Math.max(w,h));c.width=Math.round(w*k);c.height=Math.round(h*k)}
+      c.getContext("2d").drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);ok(c)};im.src=r.result};
+    r.readAsDataURL(file);
+  });
+}
+function av(p,sz){
+  var st='width:'+sz+'px;height:'+sz+'px;';
+  if(p&&p.avatar)return '<img class="av" style="'+st+'" src="'+p.avatar+'" alt="">';
+  var n=((p&&p.name)||"?").trim();
+  return '<span class="av" style="'+st+'line-height:'+sz+'px;font-size:'+Math.round(sz*.45)+'px">'+esc((n[0]||"?").toUpperCase())+'</span>';
+}
+function gstreak(){
+  if(!S.goals.length)return 0;
+  var n=0,d=new Date();if(pctDay(ymd(d))<100)d.setDate(d.getDate()-1);
+  while(n<400&&pctDay(ymd(d))>=100){n++;d.setDate(d.getDate()-1)}
+  return n;
+}
+function myStats(){
+  var days=last7(),t=today(),p=S.profile||{};
+  return {day:t,pct:days.map(pctDay),streak:gstreak(),
+    pages:days.reduce(function(s,d){return s+pagesOn(d)},0),
+    tasks:days.reduce(function(s,d){return s+S.tasks.filter(function(x){return x.done==d}).length},0),
+    goals:p.shareGoals?S.goals.filter(function(g){return active(g,t)}).map(function(g){return {n:g.name,e:g.emoji,p:Math.round(100*gfrac(g,t))}}):null};
+}
+function setPf(k,v){S.profile=S.profile||{};S.profile[k]=v;save();render()}
+async function pickAvatar(inp){
+  var f=inp.files[0];if(!f)return;
+  try{var c=await imgCanvas(f,192,true);setPf("avatar",c.toDataURL("image/jpeg",.8))}catch(e){alert("Não consegui ler essa imagem.")}
+}
+function vPerfil(){
+  var p=S.profile||{};
+  return '<div class="card"><h2>Meu perfil</h2><div class="row" style="gap:16px;margin-bottom:6px">'+av(p,88)+'<div><label class="btn" style="cursor:pointer;display:inline-block">Escolher foto<input type="file" accept="image/*" style="display:none" onchange="pickAvatar(this)"></label>'+(p.avatar?' <button class="btn g" onclick="setPf(\'avatar\',\'\')">Remover</button>':'')+'<div class="mu" style="margin-top:6px">Qualquer foto da galeria ou da câmera.</div></div></div>'+fld("Seu nome",'<input value="'+esc(p.name||"")+'" placeholder="Como o grupo vai te chamar" style="width:100%" onchange="setPf(\'name\',this.value.trim())">')+'<label class="lb" style="display:flex;gap:8px;align-items:center"><input type="checkbox" '+(p.shareGoals?"checked":"")+' onchange="setPf(\'shareGoals\',this.checked)"> Mostrar os nomes das minhas metas para o grupo</label><div class="mu">O grupo sempre vê seu percentual diário, sua sequência e os totais da semana.</div></div>'+accountCard();
+}
+function vMais(){
+  var L=[["tarefas","✅","Tarefas"],["agenda","📅","Compromissos"],["diario","📓","Diário"],["perfil","👤","Perfil"]];
+  return '<div class="types">'+L.map(function(x){return '<button class="tp" onclick="go(\''+x[0]+'\')"><b>'+x[1]+' '+x[2]+'</b></button>'}).join("")+'</div>';
+}
+
+/* grupos */
+async function loadGroups(){
+  if(!cloud.sb||!cuid)return;
+  try{
+    var r=await cloud.sb.from("groups").select("*");GS.groups=r.data||[];
+    if(!GS.groups.find(function(g){return g.id==GS.cur}))GS.cur=GS.groups[0]?GS.groups[0].id:null;
+    if(GS.cur)await loadGroup();
+  }catch(e){}
+  GS.loaded=true;softRender();
+}
+async function loadGroup(){
+  var sb=cloud.sb,g=GS.cur;
+  var m=await sb.from("group_members").select("user_id,joined_at").eq("group_id",g);GS.members=m.data||[];
+  var ids=GS.members.map(function(x){return x.user_id}),p=await sb.from("profiles").select("user_id,name,avatar,stats").in("user_id",ids);
+  GS.profs={};(p.data||[]).forEach(function(x){GS.profs[x.user_id]=x});
+  var po=await sb.from("posts").select("*").eq("group_id",g).order("created_at",{ascending:false}).limit(50);GS.posts=po.data||[];
+  var paths=GS.posts.filter(function(x){return x.photo&&!GS.urls[x.photo]}).map(function(x){return x.photo});
+  if(paths.length){var u=await sb.storage.from("group-photos").createSignedUrls(paths,3600);(u.data||[]).forEach(function(x){if(x.signedUrl)GS.urls[x.path]=x.signedUrl})}
+  if(GS.chg!=g){if(GS.ch)sb.removeChannel(GS.ch);GS.chg=g;GS.ch=sb.channel("grp-"+g).on("postgres_changes",{event:"*",schema:"public",table:"posts",filter:"group_id=eq."+g},grefresh).on("postgres_changes",{event:"*",schema:"public",table:"group_members",filter:"group_id=eq."+g},grefresh).subscribe()}
+}
+var gt=null;
+function grefresh(){clearTimeout(gt);gt=setTimeout(function(){loadGroup().then(softRender)},400)}
+function needName(){if(S.profile&&S.profile.name)return false;alert("Defina seu nome no Perfil para o grupo saber quem é você.");go("perfil");return true}
+async function gCreate(){
+  var n=$("gnm").value.trim();if(!n){alert("Dê um nome ao grupo.");return}if(needName())return;
+  var r=await cloud.sb.rpc("create_group",{p_name:n});if(r.error){alert(r.error.message);return}
+  GS.cur=r.data.id;await cloud.pushProfile();await loadGroups();
+}
+async function gJoin(){
+  var c=$("gcd").value.trim();if(!c)return;if(needName())return;
+  var r=await cloud.sb.rpc("join_group",{p_code:c});if(r.error){alert(r.error.message);return}
+  GS.cur=r.data.id;await cloud.pushProfile();await loadGroups();
+}
+async function gLeave(){
+  if(!confirm("Sair deste grupo?"))return;
+  await cloud.sb.from("group_members").delete().eq("group_id",GS.cur).eq("user_id",cuid);GS.cur=null;await loadGroups();
+}
+function gSel(id){GS.cur=id;loadGroup().then(softRender)}
+function gCopy(c){try{navigator.clipboard.writeText(c).then(function(){alert("Código copiado: "+c)},function(){prompt("Copie o código:",c)})}catch(e){prompt("Copie o código:",c)}}
+async function gPost(){
+  var t=$("gtx").value.trim(),f=$("gph").files[0],btn=$("gpb");if(!t&&!f)return;
+  btn.disabled=true;btn.textContent="Enviando…";
+  try{
+    var path=null;
+    if(f){
+      var c=await imgCanvas(f,1080,false),blob=await new Promise(function(ok){c.toBlob(ok,"image/jpeg",.8)});
+      path=GS.cur+"/"+uid()+".jpg";
+      var u=await cloud.sb.storage.from("group-photos").upload(path,blob,{contentType:"image/jpeg"});if(u.error)throw u.error;
+    }
+    var r=await cloud.sb.from("posts").insert({group_id:GS.cur,user_id:cuid,text:t,photo:path});if(r.error)throw r.error;
+    await loadGroup();
+  }catch(e){alert("Não consegui enviar: "+(e.message||e))}
+  softRender();
+}
+async function gDel(id,photo){
+  if(!confirm("Apagar esta mensagem?"))return;
+  await cloud.sb.from("posts").delete().eq("id",id);
+  if(photo)cloud.sb.storage.from("group-photos").remove([photo]);
+  await loadGroup();softRender();
+}
+function spark(a){
+  return '<svg viewBox="0 0 76 26" width="76" height="26" aria-hidden="true">'+a.map(function(v,i){var h=Math.max(2,Math.round(v/100*24));return '<rect x="'+(i*11)+'" y="'+(25-h)+'" width="8" height="'+h+'" rx="2" fill="var(--ac)" opacity="'+(i==6?1:.55)+'"/>'}).join("")+'</svg>';
+}
+function memberCard(uid2){
+  var me=uid2==cuid,p=GS.profs[uid2]||{},s=me?myStats():(p.stats||null);
+  var pr=me?Object.assign({},S.profile||{}):p;
+  var h='<div class="card" style="margin-bottom:10px"><div class="row" style="gap:12px;flex-wrap:nowrap">'+av(pr,48)+'<div style="flex:1;min-width:0"><b>'+esc(pr.name||"Sem nome")+(me?' <span class="tag">você</span>':"")+'</b>';
+  if(!s)return h+'<div class="mu">Ainda sem progresso.</div></div></div></div>';
+  var t=s.pct[6]||0;
+  h+='<div class="mu">'+(s.streak?"🔥 "+s.streak+" dia(s) seguidos · ":"")+s.pages+' pág. · '+s.tasks+' tarefas na semana'+(s.day!=today()?" · visto em "+fmt(s.day):"")+'</div></div>'+spark(s.pct)+'</div><div class="bar"><i class="'+(t>=100?"ok":"")+'" style="width:'+t+'%"></i></div><div class="mu">Hoje: '+t+'% das metas</div>';
+  if(s.goals&&s.goals.length)h+='<div style="margin-top:6px">'+s.goals.map(function(g){return '<span class="tag" style="margin:2px 4px 2px 0;display:inline-block">'+esc(g.e)+' '+esc(g.n)+' '+g.p+'%</span>'}).join("")+'</div>';
+  return h+'</div>';
+}
+function vGrupo(){
+  if(!SUPA.url||!cloud.sb)return '<div class="card"><h2>Grupo</h2><p class="mu" style="margin:0">Os grupos usam a conta na nuvem. Preencha o config.js com o seu Supabase para ativar.</p></div>';
+  if(!cloud.email)return '<div class="card"><h2>Grupo</h2><p class="mu">Entre na sua conta para criar ou entrar em um grupo de até 8 pessoas.</p><button class="btn" onclick="go(\'perfil\')">Entrar na conta</button></div>';
+  if(!GS.loaded)return '<div class="card"><div class="empty">Carregando grupos…</div></div>';
+  var g=GS.groups.find(function(x){return x.id==GS.cur}),h="";
+  var forms='<details class="card"'+(g?"":" open")+'><summary style="cursor:pointer">'+(g?"Criar ou entrar em outro grupo":"Comece criando ou entrando em um grupo")+'</summary><label class="lb">Criar um grupo novo</label><div class="row"><input id="gnm" class="grow" placeholder="Nome do grupo"><button class="btn" onclick="gCreate()">Criar</button></div><label class="lb">Entrar com um código de convite</label><div class="row"><input id="gcd" class="grow" placeholder="Código (6 letras)" style="text-transform:uppercase"><button class="btn" onclick="gJoin()">Entrar</button></div></details>';
+  if(!g)return forms;
+  if(GS.groups.length>1)h+='<div class="row" style="margin-bottom:10px">'+GS.groups.map(function(x){return '<button class="chip'+(x.id==GS.cur?" on":"")+'" onclick="gSel(\''+x.id+'\')">'+esc(x.name)+'</button>'}).join("")+'</div>';
+  var ids=GS.members.map(function(m){return m.user_id}).sort(function(a,b){return a==cuid?-1:b==cuid?1:0});
+  h+='<div class="card"><div class="row" style="justify-content:space-between"><div><div class="big">'+esc(g.name)+'</div><div class="mu">'+ids.length+' de 8 pessoas'+(ids.length<2?" · convide pelo menos mais uma":"")+'</div></div><div class="row"><button class="btn g" onclick="loadGroup().then(softRender)">Atualizar</button><button class="btn x" onclick="gLeave()">Sair</button></div></div><div class="row" style="margin-top:12px"><span class="mu">Código de convite:</span><b style="letter-spacing:.2em;font-size:1.1rem">'+esc(g.code)+'</b><button class="btn g" onclick="gCopy(\''+esc(g.code)+'\')">Copiar</button></div></div>';
+  h+='<div class="card"><h2>Progresso do grupo</h2>'+ids.map(memberCard).join("")+'</div>';
+  h+='<div class="card"><h2>Mural</h2><textarea id="gtx" style="min-height:70px" placeholder="Deixe um recado para o grupo..."></textarea><div class="row" style="margin-top:8px"><label class="btn g" style="cursor:pointer">📷 Foto<input id="gph" type="file" accept="image/*" style="display:none" onchange="this.parentNode.firstChild.nodeValue=this.files[0]?\'📷 \'+this.files[0].name.slice(0,14):\'📷 Foto\'"></label><button class="btn" id="gpb" onclick="gPost()">Publicar</button></div></div>';
+  h+='<div class="card">'+(GS.posts.length?GS.posts.map(function(x){
+    var p=x.user_id==cuid?Object.assign({},S.profile||{}):(GS.profs[x.user_id]||{});
+    return '<div class="item" style="align-items:flex-start">'+av(p,36)+'<div class="t"><b>'+esc(p.name||"Alguém")+'</b> <span class="mu">'+new Date(x.created_at).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})+'</span>'+(x.text?'<div style="white-space:pre-wrap">'+esc(x.text)+'</div>':"")+(x.photo&&GS.urls[x.photo]?'<img class="ph" loading="lazy" src="'+esc(GS.urls[x.photo])+'" alt="Foto do mural">':"")+'</div>'+(x.user_id==cuid?'<button class="btn x" onclick="gDel(\''+x.id+'\','+(x.photo?"'"+esc(x.photo)+"'":"null")+')">✕</button>':"")+'</div>'}).join(""):'<div class="empty">Nenhum recado ainda. Seja o primeiro!</div>')+'</div>';
+  return h+forms;
 }
 
 /* ---------- Backup ---------- */
@@ -409,7 +651,7 @@ function vHome(){
   h+='</div></div><div class="grid"><div class="card"><h2>Metas cumpridas (últimos 7 dias)</h2>'+chart("Metas cumpridas",days.map(pctDay),lab,100,"%")+'</div>';
   var tc=days.map(function(d){return S.tasks.filter(function(x){return x.done==d}).length}),mx=Math.max.apply(null,tc.concat([1]));
   h+='<div class="card"><h2>Tarefas concluídas (últimos 7 dias)</h2>'+chart("Tarefas concluídas",tc,lab,mx,"")+'</div></div>';
-  return h+backupCard();
+  return accountCard()+h+backupCard();
 }
 initSync();
 render();
