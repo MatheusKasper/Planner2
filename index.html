@@ -120,6 +120,27 @@ nav button.on,.chip.on{box-shadow:0 0 14px -2px var(--ac)}
 .dots{display:flex;align-items:center;gap:4px;margin-top:4px}
 .dots span{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--bd)}
 .dots .on{background:var(--ok);border-color:var(--ok)}.dots .part{background:var(--ac2);border-color:var(--ac2)}.dots .na{opacity:.25}
+:root[data-theme="sombra"]{--bg:#07040f;--card:#120a22;--card2:#170d2c;--tx:#eadfff;--mu:#9a86c4;--ac:#a66bff;--ac2:#ff4fd8;--ok:#43e0a8;--bd:#2c1b4d;--dg:#ff5b7f;--glow:rgba(166,107,255,.38);--on:#0d0620;--navbg:rgba(7,4,15,.92);--bgfx:radial-gradient(900px 420px at 85% -80px,#2a1458 0%,transparent 70%),radial-gradient(700px 400px at 0% 100%,#3a0f3a 0%,transparent 70%)}
+:root[data-theme="contraste"]{--bg:#000;--card:#0a0a0a;--card2:#111;--tx:#fff;--mu:#cfcfcf;--ac:#ffe600;--ac2:#00e5ff;--ok:#00ff88;--bd:#777;--dg:#ff6a6a;--glow:rgba(255,230,0,.22);--on:#000;--navbg:#000;--bgfx:linear-gradient(#000,#000)}
+body{font-size:1.0625rem}
+.emb{vertical-align:middle;flex:none}
+@keyframes pulseg{0%,100%{box-shadow:0 0 10px currentColor}50%{box-shadow:0 0 26px currentColor}}
+.hud-av.rk-A,.hud-av.rk-S,.hud-av.rk-Monarca{animation:pulseg 2.4s infinite}
+.xpbar i{position:relative;overflow:hidden}
+.xpbar i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);transform:translateX(-100%);animation:sheen 3s infinite}
+@keyframes sheen{to{transform:translateX(100%)}}
+#fx{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:radial-gradient(circle,rgba(4,8,20,.9),rgba(0,0,0,.97));opacity:0;pointer-events:none;transition:opacity .3s;cursor:pointer}
+#fx.on{opacity:1;pointer-events:auto}
+#fx .box{text-align:center;padding:20px;animation:popfx .6s cubic-bezier(.2,1.4,.4,1);color:#dbe7ff}
+#fx .t{letter-spacing:.3em;font:700 .85rem "Rajdhani","Segoe UI",sans-serif;color:var(--ac);margin-top:12px}
+#fx .n{font:700 3.4rem "Rajdhani","Segoe UI",sans-serif;text-shadow:0 0 28px var(--ac)}
+@keyframes popfx{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+.achg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ach{border:1px solid var(--bd);padding:10px;border-radius:4px;text-align:center;filter:grayscale(1);opacity:.45}
+.ach.on{filter:none;opacity:1;border-color:var(--ac);box-shadow:0 0 14px -6px var(--ac)}
+.ach span{font-size:1.7rem;display:block}.ach small{display:block;color:var(--mu);font-size:.72rem}
+:root[data-rm] *,:root[data-rm] *::after{animation:none!important;transition:none!important}
+@media(prefers-reduced-motion:reduce){*,*::after{animation:none!important;transition:none!important}}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
@@ -182,11 +203,11 @@ function softRender(){if(!typing())render()}
 function cloudPush(){
   if(!cloud.ref){return}
   setStatus("wait");clearTimeout(cloud.t);
-  cloud.t=setTimeout(function(){cloud.ref.set({json:JSON.stringify(S),rev:S.rev}).then(function(){setStatus("sync");if(cloud.pushProfile)cloud.pushProfile().catch(function(){})}).catch(function(){setStatus("err")})},700);
+  cloud.t=setTimeout(function(){if(!cloud.ref)return;var rv=S.rev;cloud.ref.set({json:JSON.stringify(S),rev:S.rev}).then(function(){cloud.synced=rv;setStatus("sync");if(cloud.pushProfile)cloud.pushProfile().catch(function(){})}).catch(function(){setStatus("err")})},700);
 }
 function adopt(d){
   var r=JSON.parse(d.json);
-  S=Object.assign({goals:[],log:{},tasks:[],events:[],diary:[],books:[]},r);S.rev=d.rev;S.goals=S.goals.map(norm);
+  S=Object.assign({goals:[],log:{},tasks:[],events:[],diary:[],books:[]},r);S.rev=d.rev;cloud.synced=d.rev;S.goals=S.goals.map(norm);
   try{localStorage.setItem("planner_v1",JSON.stringify(S))}catch(e){}
   softRender();
 }
@@ -449,7 +470,7 @@ function resetLocal(){S={goals:[],log:{},tasks:[],events:[],diary:[],books:[]};t
 async function initSupa(){
   if(!SUPA.url||!SUPA.key||!window.supabase)return;
   var sb=cloud.sb=supabase.createClient(SUPA.url,SUPA.key);
-  sb.auth.onAuthStateChange(function(ev,ses){setTimeout(function(){attach(ses)},0)});
+  sb.auth.onAuthStateChange(function(ev,ses){if(ev=="PASSWORD_RECOVERY")cloud.recovery=true;setTimeout(function(){attach(ses);if(cloud.recovery)go("perfil")},0)});
   document.addEventListener("visibilitychange",function(){
     if(document.visibilityState=="visible"&&tab=="grupo"&&cuid)loadGroups();
     if(document.visibilityState=="visible"&&cloud.ref)cloud.ref.get().then(function(s){var d=s.exists?s.data():null;if(d&&d.rev>(S.rev||0))adopt(d)}).catch(function(){});
@@ -459,7 +480,7 @@ async function attach(ses){
   var sb=cloud.sb;
   if(!ses){
     if(cuid)resetLocal();
-    cuid=null;cloud.ref=null;cloud.assets=null;cloud.urlFor=null;cloud.email=null;cloud.pushProfile=null;
+    clearTimeout(cloud.t);cuid=null;cloud.ref=null;cloud.assets=null;cloud.urlFor=null;cloud.email=null;cloud.pushProfile=null;
     if(GS.ch)sb.removeChannel(GS.ch);GS={groups:[],cur:null,members:[],profs:{},posts:[],urls:{},ch:null,loaded:false};
     if(cloud.ch){sb.removeChannel(cloud.ch);cloud.ch=null}
     setStatus("local");softRender();return;
@@ -506,10 +527,11 @@ async function doGoogle(){
   if(r.error)alert(r.error.message);
 }
 async function doLogout(){await cloud.sb.auth.signOut()}
-function accountCard(){
+function accountCard(){return (cloud.recovery?recCard():"")+accountCard0()}
+function accountCard0(){
   if(!SUPA.url||!cloud.sb)return "";
   if(cloud.email)return '<div class="card"><h2>Conta</h2><div class="row" style="justify-content:space-between"><div>Conectado como <b>'+esc(cloud.email)+'</b><div class="mu">Seu progresso é salvo automaticamente na sua conta.</div></div><button class="btn g" onclick="doLogout()">Sair</button></div></div>';
-  return '<div class="card"><h2>Entrar para salvar na nuvem</h2><p class="mu" style="margin:0 0 10px">Entre com seu e-mail para salvar o progresso e acessar de qualquer dispositivo. O que já está neste aparelho sobe para a sua conta.</p><div class="row"><button class="btn" onclick="doGoogle()"><b>G</b>&nbsp; Entrar com Google</button></div><div class="mu" style="margin:12px 0 8px">ou use seu e-mail:</div><div class="row"><input id="ae" type="email" placeholder="E-mail" class="grow" autocomplete="email"><input id="ap" type="password" placeholder="Senha (mín. 6)" autocomplete="current-password" style="width:170px"></div><div class="row" style="margin-top:10px"><button class="btn" onclick="doLogin(false)">Entrar</button><button class="btn g" onclick="doLogin(true)">Criar conta</button><button class="btn g" onclick="doMagic()">Receber link por e-mail</button></div></div>';
+  return '<div class="card"><h2>Entrar para salvar na nuvem</h2><p class="mu" style="margin:0 0 10px">Entre com seu e-mail para salvar o progresso e acessar de qualquer dispositivo. O que já está neste aparelho sobe para a sua conta.</p><div class="row"><button class="btn" onclick="doGoogle()"><b>G</b>&nbsp; Entrar com Google</button></div><div class="mu" style="margin:12px 0 8px">ou use seu e-mail:</div><div class="row"><input id="ae" type="email" placeholder="E-mail" class="grow" autocomplete="email"><input id="ap" type="password" placeholder="Senha (mín. 6)" autocomplete="current-password" style="width:170px"></div><div class="row" style="margin-top:10px"><button class="btn" onclick="doLogin(false)">Entrar</button><button class="btn g" onclick="doLogin(true)">Criar conta</button><button class="btn g" onclick="doMagic()">Receber link por e-mail</button><button class="btn g" onclick="doReset()">Esqueci a senha</button></div></div>';
 }
 
 /* ---------- Perfil, grupos e mobile ---------- */
@@ -553,7 +575,7 @@ async function pickAvatar(inp){
 }
 function vPerfil(){
   var p=S.profile||{};
-  return '<div class="card"><h2>Meu perfil</h2><div class="row" style="gap:16px;margin-bottom:6px">'+av(p,88)+'<div><label class="btn" style="cursor:pointer;display:inline-block">Escolher foto<input type="file" accept="image/*" style="display:none" onchange="pickAvatar(this)"></label>'+(p.avatar?' <button class="btn g" onclick="setPf(\'avatar\',\'\')">Remover</button>':'')+'<div class="mu" style="margin-top:6px">Qualquer foto da galeria ou da câmera.</div></div></div>'+fld("Seu nome",'<input value="'+esc(p.name||"")+'" placeholder="Como o grupo vai te chamar" style="width:100%" onchange="setPf(\'name\',this.value.trim())">')+'<label class="lb" style="display:flex;gap:8px;align-items:center"><input type="checkbox" '+(p.shareGoals?"checked":"")+' onchange="setPf(\'shareGoals\',this.checked)"> Mostrar os nomes das minhas metas para o grupo</label><div class="mu">O grupo sempre vê seu percentual diário, sua sequência e os totais da semana.</div></div>'+themeCard()+accountCard();
+  return '<div class="card"><h2>Meu perfil</h2><div class="row" style="gap:16px;margin-bottom:6px">'+av(p,88)+'<div><label class="btn" style="cursor:pointer;display:inline-block">Escolher foto<input type="file" accept="image/*" style="display:none" onchange="pickAvatar(this)"></label>'+(p.avatar?' <button class="btn g" onclick="setPf(\'avatar\',\'\')">Remover</button>':'')+'<div class="mu" style="margin-top:6px">Qualquer foto da galeria ou da câmera.</div></div></div>'+fld("Seu nome",'<input value="'+esc(p.name||"")+'" placeholder="Como o grupo vai te chamar" style="width:100%" onchange="setPf(\'name\',this.value.trim())">')+'<label class="lb" style="display:flex;gap:8px;align-items:center"><input type="checkbox" '+(p.shareGoals?"checked":"")+' onchange="setPf(\'shareGoals\',this.checked)"> Mostrar os nomes das minhas metas para o grupo</label><div class="mu">O grupo sempre vê seu percentual diário, sua sequência e os totais da semana.</div></div>'+themeCard()+lembretesCard()+accountCard()+segCard();
 }
 function vMais(){
   var L=[["livros","📚","Leitura"],["tarefas","✅","Tarefas"],["agenda","📅","Compromissos"],["diario","📓","Diário"],["perfil","👤","Perfil"]];
@@ -575,7 +597,9 @@ async function loadGroup(){
   var m=await sb.from("group_members").select("user_id,joined_at").eq("group_id",g);GS.members=m.data||[];
   var ids=GS.members.map(function(x){return x.user_id}),p=await sb.from("profiles").select("user_id,name,avatar,stats").in("user_id",ids);
   GS.profs={};(p.data||[]).forEach(function(x){GS.profs[x.user_id]=x});
-  var po=await sb.from("posts").select("*").eq("group_id",g).order("created_at",{ascending:false}).limit(50);GS.posts=po.data||[];
+  var po=await sb.from("posts").select("*").eq("group_id",g).order("created_at",{ascending:false}).limit(50);GS.posts=po.data||[];GS.reports=[];
+  var gg=GS.groups.find(function(x){return x.id==g});
+  if(gg&&gg.owner==cuid){var rp=await sb.from("reports").select("*").eq("group_id",g);GS.reports=rp.data||[]}
   var paths=GS.posts.filter(function(x){return x.photo&&!GS.urls[x.photo]}).map(function(x){return x.photo});
   if(paths.length){var u=await sb.storage.from("group-photos").createSignedUrls(paths,3600);(u.data||[]).forEach(function(x){if(x.signedUrl)GS.urls[x.path]=x.signedUrl})}
   if(GS.chg!=g){if(GS.ch)sb.removeChannel(GS.ch);GS.chg=g;GS.ch=sb.channel("grp-"+g).on("postgres_changes",{event:"*",schema:"public",table:"posts",filter:"group_id=eq."+g},grefresh).on("postgres_changes",{event:"*",schema:"public",table:"group_members",filter:"group_id=eq."+g},grefresh).subscribe()}
@@ -643,11 +667,11 @@ function vGrupo(){
   if(GS.groups.length>1)h+='<div class="row" style="margin-bottom:10px">'+GS.groups.map(function(x){return '<button class="chip'+(x.id==GS.cur?" on":"")+'" onclick="gSel(\''+x.id+'\')">'+esc(x.name)+'</button>'}).join("")+'</div>';
   var ids=GS.members.map(function(m){return m.user_id}).sort(function(a,b){return a==cuid?-1:b==cuid?1:0});
   h+='<div class="card"><div class="row" style="justify-content:space-between"><div><div class="big">'+esc(g.name)+'</div><div class="mu">'+ids.length+' de 8 pessoas'+(ids.length<2?" · convide pelo menos mais uma":"")+'</div></div><div class="row"><button class="btn g" onclick="loadGroup().then(softRender)">Atualizar</button><button class="btn x" onclick="gLeave()">Sair</button></div></div><div class="row" style="margin-top:12px"><span class="mu">Código de convite:</span><b style="letter-spacing:.2em;font-size:1.1rem">'+esc(g.code)+'</b><button class="btn g" onclick="gCopy(\''+esc(g.code)+'\')">Copiar</button></div></div>';
-  h+=zh("🏆","Liga do grupo")+liga(ids)+zh("👥","Progresso dos membros")+'<div class="card">'+ids.map(memberCard).join("")+'</div>';
+  h+=(g.owner==cuid?modCard(g,ids):"")+zh("🏆","Liga do grupo")+liga(ids)+zh("👥","Progresso dos membros")+'<div class="card">'+ids.map(memberCard).join("")+'</div>';
   h+='<div class="card"><h2>Mural</h2><textarea id="gtx" style="min-height:70px" placeholder="Deixe um recado para o grupo..."></textarea><div class="row" style="margin-top:8px"><label class="btn g" style="cursor:pointer">📷 Foto<input id="gph" type="file" accept="image/*" style="display:none" onchange="this.parentNode.firstChild.nodeValue=this.files[0]?\'📷 \'+this.files[0].name.slice(0,14):\'📷 Foto\'"></label><button class="btn" id="gpb" onclick="gPost()">Publicar</button></div></div>';
   h+='<div class="card">'+(GS.posts.length?GS.posts.map(function(x){
     var p=x.user_id==cuid?Object.assign({},S.profile||{}):(GS.profs[x.user_id]||{});
-    return '<div class="item" style="align-items:flex-start">'+av(p,36)+'<div class="t"><b>'+esc(p.name||"Alguém")+'</b> <span class="mu">'+new Date(x.created_at).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})+'</span>'+(x.text?'<div style="white-space:pre-wrap">'+esc(x.text)+'</div>':"")+(x.photo&&GS.urls[x.photo]?'<img class="ph" loading="lazy" src="'+esc(GS.urls[x.photo])+'" alt="Foto do mural">':"")+'</div>'+(x.user_id==cuid?'<button class="btn x" onclick="gDel(\''+x.id+'\','+(x.photo?"'"+esc(x.photo)+"'":"null")+')">✕</button>':"")+'</div>'}).join(""):'<div class="empty">Nenhum recado ainda. Seja o primeiro!</div>')+'</div>';
+    return '<div class="item" style="align-items:flex-start">'+av(p,36)+'<div class="t"><b>'+esc(p.name||"Alguém")+'</b> <span class="mu">'+new Date(x.created_at).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})+'</span>'+(x.text?'<div style="white-space:pre-wrap">'+esc(x.text)+'</div>':"")+(x.photo&&GS.urls[x.photo]?'<img class="ph" loading="lazy" src="'+esc(GS.urls[x.photo])+'" alt="Foto do mural">':"")+'</div>'+postBtns(x,g)+'</div>'}).join(""):'<div class="empty">Nenhum recado ainda. Seja o primeiro!</div>')+'</div>';
   return h+forms;
 }
 
@@ -673,12 +697,7 @@ function lvlInfo(xp){var L=Math.floor(Math.sqrt(xp/50))+1,a=50*(L-1)*(L-1),b=50*
 function rankOf(L){return L>=50?"Monarca":L>=30?"S":L>=20?"A":L>=15?"B":L>=10?"C":L>=5?"D":"E"}
 function hud(){
   var I=lvlInfo(totalXP()),p=S.profile||{},rk=rankOf(I.L);
-  return '<div class="hud"><div class="hud-av rk-'+rk+'">'+av(p,52)+'</div><div class="hud-b"><div class="hud-t"><b>'+esc(p.name||"Caçador")+'</b><span class="rk rk-'+rk+'">RANK '+rk+'</span></div><div class="hud-l">Nível <b>'+I.L+'</b> · '+TITLES[rk]+'</div><div class="xpbar"><i style="width:'+I.pct+'%"></i></div><div class="hud-x">'+I.cur+' / '+I.need+' XP para o nível '+(I.L+1)+'</div></div></div>';
-}
-function applyTheme(){document.documentElement.setAttribute("data-theme",(S.profile&&S.profile.theme)||"solo")}
-function themeCard(){
-  var t=(S.profile&&S.profile.theme)||"solo";
-  return '<div class="card"><h2>Visual</h2><div class="row"><button class="chip'+(t=="solo"?" on":"")+'" onclick="setPf(\'theme\',\'solo\')">⚡ Sistema (azul)</button><button class="chip'+(t=="classico"?" on":"")+'" onclick="setPf(\'theme\',\'classico\')">🟤 Clássico (cobre)</button></div></div>';
+  return '<div class="hud"><div class="hud-av rk-'+rk+'">'+av(p,52)+'</div><div class="hud-b"><div class="hud-t"><b>'+esc(p.name||"Caçador")+'</b>'+emblem(rk,32)+'</div><div class="hud-l">Nível <b>'+I.L+'</b> · '+TITLES[rk]+'</div><div class="xpbar"><i style="width:'+I.pct+'%"></i></div><div class="hud-x">'+I.cur+' / '+I.need+' XP para o nível '+(I.L+1)+'</div></div></div>';
 }
 function sys(title,msg){
   var e=$("sys");if(!e){e=document.createElement("div");e.id="sys";document.body.appendChild(e)}
@@ -690,7 +709,8 @@ function postRender(){
   if(S.goals.length&&q.done&&!S.qdone[t]){S.qdone[t]=1;save();sys("Missão concluída","+"+XPV.missao+" XP");setTimeout(render,50);return}
   var L=lvlInfo(totalXP()).L;
   if(S.lv===undefined){S.lv=L}
-  else if(L>S.lv){S.lv=L;save();sys("Nível aumentou!","Você chegou ao nível "+L+" · Rank "+rankOf(L))}
+  else if(L>S.lv){S.lv=L;save();fx("NÍVEL AUMENTOU","NÍVEL "+L,TITLES[rankOf(L)],rankOf(L))}
+  checkAch();
 }
 
 /* missão diária */
@@ -791,7 +811,7 @@ function vArsenal(){
     var a=days.filter(function(d){return active(g,d)}),ok=a.filter(function(d){return gfrac(g,d)>=1}).length;
     h+='<div class="item"><div class="t"><b><span style="color:'+g.color+'">'+esc(g.emoji)+'</span> '+esc(g.name)+'</b><div class="dots">'+days.map(function(d){var f=active(g,d)?gfrac(g,d):-1;return '<span class="'+(f<0?"na":f>=1?"on":f>0?"part":"")+'"></span>'}).join("")+' <span class="mu" style="border:0;width:auto">'+(a.length?Math.round(100*ok/a.length):0)+'% da semana</span></div></div><button class="btn g" onclick="go(\'metas\');editGoal(\''+g.id+'\')">Ajustar</button></div>';
   });
-  return h+'</div>';
+  return h+'</div>'+zh("🏅","Conquistas")+achCard();
 }
 
 /* tela Hoje */
@@ -811,10 +831,180 @@ function liga(ids){
   var rows=ids.map(function(id){var me=id==cuid,p=me?(S.profile||{}):(GS.profs[id]||{}),s=me?myStats():(p.stats||{});return {me:me,p:p,xp:LG=="sem"?(s.wxp||0):(s.xp||0),L:lvlInfo(s.xp||0).L}}).sort(function(a,b){return b.xp-a.xp});
   var top=Math.max(1,rows.length?rows[0].xp:1),med=["🥇","🥈","🥉"];
   var h='<div class="card"><div class="row" style="margin-bottom:8px"><button class="chip'+(LG=="sem"?" on":"")+'" onclick="LG=\'sem\';render()">Últimos 7 dias</button><button class="chip'+(LG=="all"?" on":"")+'" onclick="LG=\'all\';render()">Geral</button></div>';
-  rows.forEach(function(r,i){var rk=rankOf(r.L);h+='<div class="lg'+(r.me?" me":"")+'"><span class="pos">'+(med[i]||i+1)+'</span>'+av(r.p,38)+'<div style="flex:1;min-width:0"><b>'+esc(r.p.name||"Sem nome")+'</b> <span class="rk rk-'+rk+'">'+rk+'</span><div class="bar"><i style="width:'+Math.round(100*r.xp/top)+'%"></i></div></div><b>'+r.xp+' XP</b></div>'});
+  rows.forEach(function(r,i){var rk=rankOf(r.L);h+='<div class="lg'+(r.me?" me":"")+'"><span class="pos">'+(med[i]||i+1)+'</span>'+av(r.p,38)+'<div style="flex:1;min-width:0"><b>'+esc(r.p.name||"Sem nome")+'</b> '+emblem(rk,20)+'<div class="bar"><i style="width:'+Math.round(100*r.xp/top)+'%"></i></div></div><b>'+r.xp+' XP</b></div>'});
   var mi=rows.findIndex(function(r){return r.me});
   if(mi>0)h+='<div class="mu" style="margin-top:8px">Faltam '+(rows[mi-1].xp-rows[mi].xp+1)+' XP para ultrapassar '+esc(rows[mi-1].p.name||"o próximo")+'.</div>';
   else if(mi==0&&rows.length>1)h+='<div class="mu" style="margin-top:8px">Você lidera por '+(rows[0].xp-rows[1].xp)+' XP. Mantenha a liderança!</div>';
+  return h+'</div>';
+}
+
+/* ---------- Lote 1: emblemas, efeitos, conquistas, lembretes, conta, moderação ---------- */
+var RKC={E:"#8a96ad",D:"#4cd48b",C:"#3aa0ff",B:"#a07bff",A:"#ff9a3d",S:"#ffc857",Monarca:"#ff4fd8"};
+function emblem(rk,sz){
+  var c=RKC[rk],t=rk=="Monarca"?"M":rk;
+  return '<svg class="emb" width="'+sz+'" height="'+sz+'" viewBox="0 0 48 48" role="img" aria-label="Rank '+rk+'"><path d="M24 3l17 7v13c0 11-7 19-17 22C14 42 7 34 7 23V10z" fill="#050816" stroke="'+c+'" stroke-width="2.5"/><path d="M24 8l12 5v10c0 8-5 14-12 17-7-3-12-9-12-17V13z" fill="none" stroke="'+c+'" stroke-opacity=".45"/><text x="24" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="'+c+'" font-family="Rajdhani,sans-serif">'+t+'</text></svg>';
+}
+function fx(title,big,sub,rk){
+  var e=$("fx");if(!e){e=document.createElement("div");e.id="fx";e.onclick=function(){e.className=""};document.body.appendChild(e)}
+  e.innerHTML='<div class="box">'+emblem(rk,96)+'<div class="t">[ SISTEMA ] '+esc(title)+'</div><div class="n">'+esc(big)+'</div><div class="mu">'+esc(sub)+'</div></div>';
+  e.className="on";clearTimeout(e._t);e._t=setTimeout(function(){e.className=""},3200);
+}
+
+/* conquistas */
+var ACH=[
+ ["a_first","🌟","Primeiro passo","Cumpra a sua primeira meta",function(c){return c.goalDays>=1}],
+ ["a_goal50","🎯","Mira certeira","Cumpra 50 metas",function(c){return c.goalDays>=50}],
+ ["a_7","🔥","Sete seguidos","7 dias seguidos com todas as metas",function(c){return c.streakMax>=7}],
+ ["a_30","💎","Imparável","30 dias seguidos com todas as metas",function(c){return c.streakMax>=30}],
+ ["a_q1","⚡","Missão cumprida","Complete uma missão diária",function(c){return c.q>=1}],
+ ["a_q10","🏅","Disciplina","Complete 10 missões diárias",function(c){return c.q>=10}],
+ ["a_l5","⚔️","Desperto","Alcance o nível 5",function(c){return c.L>=5}],
+ ["a_l10","🛡️","Combatente","Alcance o nível 10",function(c){return c.L>=10}],
+ ["a_l20","👑","Veterano","Alcance o nível 20",function(c){return c.L>=20}],
+ ["a_xp1k","💠","Mil de XP","Some 1000 XP",function(c){return c.xp>=1000}],
+ ["a_book","📖","Leitor","Termine um livro",function(c){return c.books>=1}],
+ ["a_p500","📚","Devorador","Leia 500 páginas",function(c){return c.pages>=500}],
+ ["a_m10","✍️","Anotador","Salve 10 marcações de leitura",function(c){return c.marks>=10}],
+ ["a_t10","🏋️","Treinado","Conclua 10 treinos",function(c){return c.treinos>=10}],
+ ["a_t100","🦾","Máquina","Conclua 100 treinos",function(c){return c.treinos>=100}],
+ ["a_task50","✅","Executor","Conclua 50 tarefas",function(c){return c.tasks>=50}],
+ ["a_diary7","📓","Cronista","Escreva no diário em 7 dias diferentes",function(c){return c.diary>=7}],
+ ["a_group","👥","Em equipe","Entre em um grupo",function(c){return c.group}]
+];
+function achCtx(){
+  var gd=0,pg=0,mk=0,tr=0,dd={},best=0,cur=0,i,rl=rlog(),tl=S.tlog||{};
+  Object.keys(S.log).forEach(function(d){S.goals.forEach(function(g){if(gdone(g,d))gd++})});
+  Object.keys(rl).forEach(function(d){pg+=rl[d]});
+  S.books.forEach(function(b){mk+=(b.marks||[]).length});
+  Object.keys(tl).forEach(function(d){tr+=tl[d].length});
+  S.diary.forEach(function(n){dd[n.date]=1});
+  for(i=119;i>=0;i--){var x=new Date();x.setDate(x.getDate()-i);if(S.goals.length&&pctDay(ymd(x))>=100){cur++;if(cur>best)best=cur}else cur=0}
+  var xp=totalXP();
+  return {goalDays:gd,streakMax:best,L:lvlInfo(xp).L,xp:xp,q:Object.keys(S.qdone||{}).length,books:S.books.filter(function(b){return b.status=="lido"}).length,pages:pg,marks:mk,treinos:tr,tasks:S.tasks.filter(function(t){return t.done}).length,diary:Object.keys(dd).length,group:GS.groups.length>0};
+}
+function checkAch(){
+  var c=achCtx(),first=S.ach===undefined,A=S.ach=S.ach||{},nw=[],t=today();
+  ACH.forEach(function(a){if(!A[a[0]]&&a[4](c)){A[a[0]]=t;nw.push(a)}});
+  if(!nw.length)return;
+  save();
+  if(first){sys("Conquistas","Você já liberou "+nw.length+". Veja no Arsenal.");return}
+  sys("Conquista desbloqueada",nw[0][1]+" "+nw[0][2]+(nw.length>1?" +"+(nw.length-1):""));
+}
+function achCard(){
+  var A=S.ach||{},n=Object.keys(A).length;
+  return '<div class="card"><h2>Conquistas · '+n+'/'+ACH.length+'</h2><div class="achg">'+ACH.map(function(a){return '<div class="ach'+(A[a[0]]?" on":"")+'"><span>'+a[1]+'</span><b>'+esc(a[2])+'</b><small>'+esc(a[3])+'</small></div>'}).join("")+'</div></div>';
+}
+
+/* temas e acessibilidade */
+var THEMES=[["solo","⚡ Sistema"],["sombra","🟣 Sombra"],["classico","🟤 Clássico"],["contraste","◐ Alto contraste"]];
+function applyTheme(){
+  var p=S.profile||{},h=document.documentElement;
+  h.setAttribute("data-theme",p.theme||"solo");
+  h.style.fontSize=[100,115,130][p.fs||0]+"%";
+  if(p.rm)h.setAttribute("data-rm","1");else h.removeAttribute("data-rm");
+}
+function themeCard(){
+  var p=S.profile||{},t=p.theme||"solo",f=p.fs||0;
+  return '<div class="card"><h2>Visual e acessibilidade</h2><div class="row">'+THEMES.map(function(x){return '<button class="chip'+(t==x[0]?" on":"")+'" onclick="setPf(\'theme\',\''+x[0]+'\')">'+x[1]+'</button>'}).join("")+'</div><label class="lb">Tamanho da letra</label><div class="row">'+["Normal","Grande","Maior"].map(function(n,i){return '<button class="chip'+(f==i?" on":"")+'" onclick="setPf(\'fs\','+i+')">'+n+'</button>'}).join("")+'</div><label class="lb">Movimento</label><div class="row"><button class="chip'+(p.rm?" on":"")+'" onclick="setPf(\'rm\','+(p.rm?0:1)+')">Reduzir animações</button></div></div>';
+}
+
+/* lembretes (com o app aberto ou instalado) */
+var remSeen={};try{remSeen=JSON.parse(localStorage.getItem("planner_rem")||"{}")}catch(e){}
+function remMark(k){remSeen[k]=1;try{localStorage.setItem("planner_rem",JSON.stringify(remSeen))}catch(e){}}
+function notify(title,body){
+  try{
+    if("Notification" in window&&Notification.permission=="granted"){
+      if(navigator.serviceWorker&&navigator.serviceWorker.ready)navigator.serviceWorker.ready.then(function(r){r.showNotification(title,{body:body,icon:"icon-192.png"})}).catch(function(){new Notification(title,{body:body})});
+      else new Notification(title,{body:body});
+    }
+  }catch(e){}
+  sys(title,body);
+}
+function remCfg(){return Object.assign({on:false,time:"20:00",ev:true},(S.profile&&S.profile.rem)||{})}
+function remSet(k,v){S.profile=S.profile||{};var r=remCfg();r[k]=v;S.profile.rem=r;save();render()}
+function remAsk(){
+  if(!("Notification" in window)){alert("Este navegador não suporta notificações.");return}
+  Notification.requestPermission().then(function(p){if(p=="granted")remSet("on",true);else alert("Permissão negada. Libere as notificações deste site nas configurações do navegador.")});
+}
+function checkReminders(){
+  var r=remCfg();if(!r.on)return;
+  var now=new Date(),t=today(),hm=now.toTimeString().slice(0,5);
+  if(r.ev)evSorted().forEach(function(e){
+    if(e.date!=t||!e.time)return;
+    var m=(new Date(t+"T"+e.time)-now)/6e4,k="e"+e.id+t;
+    if(m<=15&&m>=-1&&!remSeen[k]){remMark(k);notify("Compromisso em breve",e.title+" às "+e.time)}
+  });
+  if(r.time&&hm>=r.time&&!remSeen["d"+t]){
+    remMark("d"+t);
+    if(S.goals.length&&!(S.qdone&&S.qdone[t]))notify("Missão diária pendente","Ainda dá tempo de cumprir os objetivos de hoje e manter a sequência.");
+  }
+}
+function lembretesCard(){
+  var r=remCfg(),ok="Notification" in window&&Notification.permission=="granted",h='<div class="card"><h2>Lembretes</h2>';
+  if(r.on&&ok)h+='<div class="row"><button class="chip'+(r.ev?" on":"")+'" onclick="remSet(\'ev\','+(!r.ev)+')">Avisar compromissos (15 min antes)</button></div><label class="lb">Aviso da missão diária pendente, a partir de</label><div class="row"><input type="time" value="'+esc(r.time)+'" onchange="remSet(\'time\',this.value)"><button class="btn g" onclick="remSet(\'on\',false)">Desativar</button></div>';
+  else h+='<button class="btn" onclick="remAsk()">Ativar lembretes</button>';
+  return h+'<p class="mu" style="margin:10px 0 0">Os avisos funcionam com o app aberto ou instalado e rodando em segundo plano. Com o app totalmente fechado o celular não recebe aviso, pois isso exigiria um servidor de notificações.</p></div>';
+}
+
+/* segurança da conta */
+async function doReset(){
+  var e=($("ae")||{}).value;e=(e||"").trim();if(!e){alert("Digite o seu e-mail no campo acima.");return}
+  var r=await cloud.sb.auth.resetPasswordForEmail(e,{redirectTo:location.origin+location.pathname});
+  alert(r.error?r.error.message:"Se esse e-mail tiver conta, enviamos um link para criar uma nova senha.");
+}
+async function doNewPass(){
+  var p=$("np").value;if(p.length<6){alert("A senha precisa ter pelo menos 6 caracteres.");return}
+  var r=await cloud.sb.auth.updateUser({password:p});
+  if(r.error){alert(r.error.message);return}
+  cloud.recovery=false;alert("Senha atualizada.");render();
+}
+function recCard(){return '<div class="card"><h2>Criar nova senha</h2><div class="row"><input id="np" type="password" placeholder="Nova senha (mín. 6)" class="grow" autocomplete="new-password"><button class="btn" onclick="doNewPass()">Salvar senha</button></div></div>'}
+function segCard(){
+  if(!cloud.email)return "";
+  return '<div class="card"><h2>Segurança e dados</h2><div class="row"><input id="np" type="password" placeholder="Nova senha (mín. 6)" class="grow" autocomplete="new-password"><button class="btn g" onclick="doNewPass()">Alterar senha</button></div><div class="row" style="margin-top:12px"><button class="btn g" onclick="exportMine()">Exportar meus dados</button><button class="btn x" onclick="delAccount()">Excluir minha conta</button></div><p class="mu" style="margin:10px 0 0">Excluir apaga tudo na nuvem: metas, diário, livros, PDFs, fotos e recados. Grupos criados por você também serão apagados.</p></div>';
+}
+async function exportMine(){
+  try{
+    var po=await cloud.sb.from("posts").select("*").eq("user_id",cuid);
+    dl("meus-dados-planner-"+today()+".json",JSON.stringify({app:"planner",exportado:new Date().toISOString(),email:cloud.email,estado:S,recados:po.data||[]},null,1));
+  }catch(e){alert("Não consegui exportar: "+(e.message||e))}
+}
+async function delAccount(){
+  if(!confirm("Excluir sua conta apaga TODOS os seus dados na nuvem e não pode ser desfeito. Grupos criados por você também serão apagados. Continuar?"))return;
+  if(prompt("Digite EXCLUIR para confirmar:")!=="EXCLUIR")return;
+  var sb=cloud.sb;
+  try{
+    var pd=S.books.filter(function(b){return b.asset}).map(function(b){return b.asset});
+    if(pd.length)await sb.storage.from("pdfs").remove(pd);
+    var po=await sb.from("posts").select("photo").eq("user_id",cuid),ph=(po.data||[]).map(function(x){return x.photo}).filter(Boolean);
+    if(ph.length)await sb.storage.from("group-photos").remove(ph);
+    var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
+  }catch(e){alert("Não consegui excluir a conta: "+(e.message||e));return}
+  await sb.auth.signOut({scope:"local"});alert("Conta excluída.");
+}
+
+/* moderação do grupo */
+async function gKick(id){
+  if(!confirm("Remover esta pessoa do grupo?"))return;
+  var r=await cloud.sb.from("group_members").delete().eq("group_id",GS.cur).eq("user_id",id);
+  if(r&&r.error){alert(r.error.message);return}
+  await loadGroup();softRender();
+}
+async function gReport(pid){
+  var why=prompt("Por que você quer denunciar esta mensagem? (opcional)");if(why===null)return;
+  var r=await cloud.sb.from("reports").insert({group_id:GS.cur,post_id:pid,reporter:cuid,reason:why||""});
+  alert(r.error?r.error.message:"Denúncia enviada ao dono do grupo.");
+}
+async function gDismiss(id){await cloud.sb.from("reports").delete().eq("id",id);await loadGroup();softRender()}
+function postBtns(x,g){
+  if(x.user_id==cuid||g.owner==cuid)return '<button class="btn x" onclick="gDel(\''+x.id+'\','+(x.photo?"'"+esc(x.photo)+"'":"null")+')">✕</button>';
+  return '<button class="btn x" title="Denunciar" onclick="gReport(\''+x.id+'\')">⚑</button>';
+}
+function modCard(g,ids){
+  var h='<div class="card"><h2>Moderação (dono do grupo)</h2>',others=ids.filter(function(i){return i!=cuid});
+  h+=others.length?others.map(function(i){var p=GS.profs[i]||{};return '<div class="item">'+av(p,32)+'<div class="t">'+esc(p.name||"Sem nome")+'</div><button class="btn x" onclick="gKick(\''+i+'\')">Remover</button></div>'}).join(""):'<div class="empty">Ainda não há outros membros.</div>';
+  var R=GS.reports||[];
+  if(R.length)h+='<h2 style="margin-top:14px">Denúncias ('+R.length+')</h2>'+R.map(function(r){var po=GS.posts.find(function(x){return x.id==r.post_id});return '<div class="item" style="align-items:flex-start"><div class="t"><div class="mu">'+esc(r.reason||"Sem motivo informado")+'</div>'+(po?'<div class="qt">'+esc(po.text||"(foto)")+'</div>':'<div class="mu">Mensagem já removida.</div>')+'</div>'+(po?'<button class="btn x" onclick="gDel(\''+po.id+'\','+(po.photo?"'"+esc(po.photo)+"'":"null")+')">Apagar</button>':"")+'<button class="btn g" onclick="gDismiss(\''+r.id+'\')">Dispensar</button></div>'}).join("");
   return h+'</div>';
 }
 
@@ -871,6 +1061,9 @@ function vHomeOld(){
 }
 initSync();
 render();
+if("serviceWorker" in navigator&&location.protocol.indexOf("http")==0)navigator.serviceWorker.register("sw.js").catch(function(){});
+window.addEventListener("online",function(){if(cloud.ref&&S.rev>(cloud.synced||0))cloudPush()});
+setInterval(checkReminders,30000);
 </script>
 </body>
 </html>
