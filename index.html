@@ -141,6 +141,18 @@ body{font-size:1.0625rem}
 .ach span{font-size:1.7rem;display:block}.ach small{display:block;color:var(--mu);font-size:.72rem}
 :root[data-rm] *,:root[data-rm] *::after{animation:none!important;transition:none!important}
 @media(prefers-reduced-motion:reduce){*,*::after{animation:none!important;transition:none!important}}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .ch{text-align:center;color:var(--mu);font-size:.75rem;letter-spacing:.1em}
+.cd{position:relative;aspect-ratio:1;border:1px solid var(--bd);border-radius:4px;color:var(--tx);font:inherit;font-size:.85rem;cursor:pointer;padding:0;background:transparent}
+.cd.td{border-color:var(--ac);box-shadow:0 0 10px -2px var(--ac)}
+.cd.sel{outline:2px solid var(--ac2)}
+.cd.fu{opacity:.35}
+.cd i{position:absolute;right:4px;bottom:4px;width:6px;height:6px;border-radius:50%;background:var(--ac)}
+.cmt{margin:6px 0 0 6px;padding-left:10px;border-left:2px solid var(--bd);font-size:.92rem}
+#tour{position:fixed;inset:0;z-index:70;display:none;place-items:center;background:rgba(0,0,0,.82);padding:16px}
+#tour.on{display:grid}
+.tbox{max-width:380px;background:var(--card);border:1px solid var(--ac);box-shadow:0 0 40px var(--glow);border-radius:6px;padding:24px;text-align:center}
+.tbox .ti{font-size:3rem}.tbox h3{margin:6px 0;letter-spacing:.14em;text-transform:uppercase}.tbox p{color:var(--mu);margin:0 0 16px}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
@@ -183,7 +195,7 @@ var dbp=null;
 function idb(){if(dbp)return dbp;dbp=new Promise(function(ok,no){var r=indexedDB.open("planner_pdfs",1);r.onupgradeneeded=function(){r.result.createObjectStore("pdfs")};r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)}});return dbp}
 function tx(mode,fn){return idb().then(function(db){return new Promise(function(ok,no){var t=db.transaction("pdfs",mode),q=fn(t.objectStore("pdfs"));t.oncomplete=function(){ok(q&&q.result)};t.onerror=function(){no(t.error)}})})}
 
-function go(t){tab=t;render();window.scrollTo(0,0);if(t=="grupo"&&cloud.sb&&cuid)loadGroups()}
+function go(t){tab=t;render();window.scrollTo(0,0);if(t=="grupo"&&cloud.sb&&cuid)loadGroups();if(t=="perfil"&&cloud.sb&&cuid)loadBackups()}
 function render(){
   $("hoje").textContent=new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   $("nav").innerHTML=TABS.map(function(t){return '<button class="'+(t[0]==tab?"on":"")+'" onclick="go(\''+t[0]+'\')">'+t[1]+'</button>'}).join("");
@@ -507,7 +519,7 @@ async function attach(ses){
   cloud.ch=sb.channel("ps-"+me).on("postgres_changes",{event:"*",schema:"public",table:"planner_state",filter:"user_id=eq."+me},function(p){var d=p.new;if(d&&Number(d.rev)>(S.rev||0))adopt({json:JSON.stringify(d.data),rev:Number(d.rev)})}).subscribe();
   var md=ses.user.user_metadata||{},gn=md.full_name||md.name;
   if(gn&&!(S.profile&&S.profile.name)){S.profile=S.profile||{};S.profile.name=gn;save()}
-  cloud.pushProfile().catch(function(){});if(tab=="grupo")loadGroups();
+  cloud.pushProfile().catch(function(){});if(tab=="grupo")loadGroups();autoBackup();
   migratePdfs();softRender();
 }
 async function doLogin(signup){
@@ -563,7 +575,7 @@ function gstreak(){
 }
 function myStats(){
   var days=last7(),t=today(),p=S.profile||{};
-  return {day:t,xp:totalXP(),wxp:weekXP(),pct:days.map(pctDay),streak:gstreak(),
+  return {day:t,xp:totalXP(),wxp:weekXP(),mxp:monthXP(0),pmxp:monthXP(-1),pct:days.map(pctDay),streak:gstreak(),
     pages:days.reduce(function(s,d){return s+pagesOn(d)},0),
     tasks:days.reduce(function(s,d){return s+S.tasks.filter(function(x){return x.done==d}).length},0),
     goals:p.shareGoals?S.goals.filter(function(g){return active(g,t)}).map(function(g){return {n:g.name,e:g.emoji,p:Math.round(100*gfrac(g,t))}}):null};
@@ -575,7 +587,7 @@ async function pickAvatar(inp){
 }
 function vPerfil(){
   var p=S.profile||{};
-  return '<div class="card"><h2>Meu perfil</h2><div class="row" style="gap:16px;margin-bottom:6px">'+av(p,88)+'<div><label class="btn" style="cursor:pointer;display:inline-block">Escolher foto<input type="file" accept="image/*" style="display:none" onchange="pickAvatar(this)"></label>'+(p.avatar?' <button class="btn g" onclick="setPf(\'avatar\',\'\')">Remover</button>':'')+'<div class="mu" style="margin-top:6px">Qualquer foto da galeria ou da câmera.</div></div></div>'+fld("Seu nome",'<input value="'+esc(p.name||"")+'" placeholder="Como o grupo vai te chamar" style="width:100%" onchange="setPf(\'name\',this.value.trim())">')+'<label class="lb" style="display:flex;gap:8px;align-items:center"><input type="checkbox" '+(p.shareGoals?"checked":"")+' onchange="setPf(\'shareGoals\',this.checked)"> Mostrar os nomes das minhas metas para o grupo</label><div class="mu">O grupo sempre vê seu percentual diário, sua sequência e os totais da semana.</div></div>'+themeCard()+lembretesCard()+accountCard()+segCard();
+  return '<div class="card"><h2>Meu perfil</h2><div class="row" style="gap:16px;margin-bottom:6px">'+av(p,88)+'<div><label class="btn" style="cursor:pointer;display:inline-block">Escolher foto<input type="file" accept="image/*" style="display:none" onchange="pickAvatar(this)"></label>'+(p.avatar?' <button class="btn g" onclick="setPf(\'avatar\',\'\')">Remover</button>':'')+'<div class="mu" style="margin-top:6px">Qualquer foto da galeria ou da câmera.</div></div></div>'+fld("Seu nome",'<input value="'+esc(p.name||"")+'" placeholder="Como o grupo vai te chamar" style="width:100%" onchange="setPf(\'name\',this.value.trim())">')+'<label class="lb" style="display:flex;gap:8px;align-items:center"><input type="checkbox" '+(p.shareGoals?"checked":"")+' onchange="setPf(\'shareGoals\',this.checked)"> Mostrar os nomes das minhas metas para o grupo</label><div class="mu">O grupo sempre vê seu percentual diário, sua sequência e os totais da semana.</div></div>'+themeCard()+lembretesCard()+accountCard()+segCard()+backupsCard()+tourBtn();
 }
 function vMais(){
   var L=[["livros","📚","Leitura"],["tarefas","✅","Tarefas"],["agenda","📅","Compromissos"],["diario","📓","Diário"],["perfil","👤","Perfil"]];
@@ -600,9 +612,14 @@ async function loadGroup(){
   var po=await sb.from("posts").select("*").eq("group_id",g).order("created_at",{ascending:false}).limit(50);GS.posts=po.data||[];GS.reports=[];
   var gg=GS.groups.find(function(x){return x.id==g});
   if(gg&&gg.owner==cuid){var rp=await sb.from("reports").select("*").eq("group_id",g);GS.reports=rp.data||[]}
+  GS.duels=[];GS.reacts=[];GS.ggoal=null;
+  try{var du=await sb.from("duels").select("*").eq("group_id",g).order("created_at",{ascending:false}).limit(20);GS.duels=du.data||[]}catch(e){}
+  try{var rx=await sb.from("post_reactions").select("*").eq("group_id",g);GS.reacts=rx.data||[]}catch(e){}
+  try{var gl=await sb.from("group_goals").select("*").eq("group_id",g).maybeSingle();GS.ggoal=gl.data||null}catch(e){}
+  try{await duelFinalize()}catch(e){}
   var paths=GS.posts.filter(function(x){return x.photo&&!GS.urls[x.photo]}).map(function(x){return x.photo});
   if(paths.length){var u=await sb.storage.from("group-photos").createSignedUrls(paths,3600);(u.data||[]).forEach(function(x){if(x.signedUrl)GS.urls[x.path]=x.signedUrl})}
-  if(GS.chg!=g){if(GS.ch)sb.removeChannel(GS.ch);GS.chg=g;GS.ch=sb.channel("grp-"+g).on("postgres_changes",{event:"*",schema:"public",table:"posts",filter:"group_id=eq."+g},grefresh).on("postgres_changes",{event:"*",schema:"public",table:"group_members",filter:"group_id=eq."+g},grefresh).subscribe()}
+  if(GS.chg!=g){if(GS.ch)sb.removeChannel(GS.ch);GS.chg=g;GS.ch=sb.channel("grp-"+g).on("postgres_changes",{event:"*",schema:"public",table:"posts",filter:"group_id=eq."+g},grefresh).on("postgres_changes",{event:"*",schema:"public",table:"group_members",filter:"group_id=eq."+g},grefresh).on("postgres_changes",{event:"*",schema:"public",table:"duels",filter:"group_id=eq."+g},grefresh).on("postgres_changes",{event:"*",schema:"public",table:"group_goals",filter:"group_id=eq."+g},grefresh).on("postgres_changes",{event:"*",schema:"public",table:"post_reactions",filter:"group_id=eq."+g},grefresh).subscribe()}
 }
 var gt=null;
 function grefresh(){clearTimeout(gt);gt=setTimeout(function(){loadGroup().then(softRender)},400)}
@@ -667,16 +684,14 @@ function vGrupo(){
   if(GS.groups.length>1)h+='<div class="row" style="margin-bottom:10px">'+GS.groups.map(function(x){return '<button class="chip'+(x.id==GS.cur?" on":"")+'" onclick="gSel(\''+x.id+'\')">'+esc(x.name)+'</button>'}).join("")+'</div>';
   var ids=GS.members.map(function(m){return m.user_id}).sort(function(a,b){return a==cuid?-1:b==cuid?1:0});
   h+='<div class="card"><div class="row" style="justify-content:space-between"><div><div class="big">'+esc(g.name)+'</div><div class="mu">'+ids.length+' de 8 pessoas'+(ids.length<2?" · convide pelo menos mais uma":"")+'</div></div><div class="row"><button class="btn g" onclick="loadGroup().then(softRender)">Atualizar</button><button class="btn x" onclick="gLeave()">Sair</button></div></div><div class="row" style="margin-top:12px"><span class="mu">Código de convite:</span><b style="letter-spacing:.2em;font-size:1.1rem">'+esc(g.code)+'</b><button class="btn g" onclick="gCopy(\''+esc(g.code)+'\')">Copiar</button></div></div>';
-  h+=(g.owner==cuid?modCard(g,ids):"")+zh("🏆","Liga do grupo")+liga(ids)+zh("👥","Progresso dos membros")+'<div class="card">'+ids.map(memberCard).join("")+'</div>';
+  h+=(g.owner==cuid?modCard(g,ids):"")+zh("🏆","Liga do grupo")+liga(ids)+metaGrupoCard(g,ids)+zh("⚔️","Duelos")+duelosCard(g,ids)+zh("👥","Progresso dos membros")+'<div class="card">'+ids.map(memberCard).join("")+'</div>';
   h+='<div class="card"><h2>Mural</h2><textarea id="gtx" style="min-height:70px" placeholder="Deixe um recado para o grupo..."></textarea><div class="row" style="margin-top:8px"><label class="btn g" style="cursor:pointer">📷 Foto<input id="gph" type="file" accept="image/*" style="display:none" onchange="this.parentNode.firstChild.nodeValue=this.files[0]?\'📷 \'+this.files[0].name.slice(0,14):\'📷 Foto\'"></label><button class="btn" id="gpb" onclick="gPost()">Publicar</button></div></div>';
-  h+='<div class="card">'+(GS.posts.length?GS.posts.map(function(x){
-    var p=x.user_id==cuid?Object.assign({},S.profile||{}):(GS.profs[x.user_id]||{});
-    return '<div class="item" style="align-items:flex-start">'+av(p,36)+'<div class="t"><b>'+esc(p.name||"Alguém")+'</b> <span class="mu">'+new Date(x.created_at).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})+'</span>'+(x.text?'<div style="white-space:pre-wrap">'+esc(x.text)+'</div>':"")+(x.photo&&GS.urls[x.photo]?'<img class="ph" loading="lazy" src="'+esc(GS.urls[x.photo])+'" alt="Foto do mural">':"")+'</div>'+postBtns(x,g)+'</div>'}).join(""):'<div class="empty">Nenhum recado ainda. Seja o primeiro!</div>')+'</div>';
+  h+='<div class="card">'+postsHtml(g)+'</div>';
   return h+forms;
 }
 
 /* ---------- Sistema (XP, níveis, missões, arsenal, liga) ---------- */
-var XPV={meta:20,tarefa:10,pagina:1,marca:5,diario:5,treino:15,missao:60},TD=null,LG="sem";
+var XPV={meta:20,tarefa:10,pagina:1,marca:5,diario:5,treino:15,missao:60,foco:2,revisao:20},TD=null,LG="sem";
 var TITLES={E:"Novato",D:"Desperto",C:"Combatente",B:"Elite",A:"Veterano",S:"Lendário",Monarca:"Monarca"};
 function zh(i,t){return '<div class="zh"><span>'+i+'</span>'+t+'</div>'}
 function gdone(g,d){var e=S.log[d]&&S.log[d][g.id];return g.type=="max"?(e!==undefined&&gok(g,d)):(gok(g,d)&&gnum(g,d)>0)}
@@ -689,6 +704,9 @@ function xpMap(){
   var dd={};S.diary.forEach(function(n){if(!dd[n.date]){dd[n.date]=1;add(n.date,XPV.diario)}});
   var tl=S.tlog||{};Object.keys(tl).forEach(function(d){add(d,XPV.treino*tl[d].length)});
   var qd=S.qdone||{};Object.keys(qd).forEach(function(d){add(d,XPV.missao)});
+  var fc=S.foco||{};Object.keys(fc).forEach(function(d){add(d,Math.min(120,Math.floor(fc[d]/5)*XPV.foco))});
+  var rv=S.revs||{};Object.keys(rv).forEach(function(k){add(rv[k].d,XPV.revisao)});
+  var dw=S.duelWon||{};Object.keys(dw).forEach(function(k){add(dw[k].day,dw[k].xp)});
   return m;
 }
 function totalXP(){var m=xpMap(),t=0;for(var k in m)t+=m[k];return t}
@@ -801,7 +819,7 @@ function dicas(){
 /* arsenal */
 function vArsenal(){
   var t=today(),days=last7(),dn=(S.tlog&&S.tlog[t])||[],th=treinosHoje();
-  var h=zh("💡","Dicas do Sistema")+'<div class="card">'+dicas()+'</div>'+zh("🏋️","Treinos");
+  var h=zh("⏱️","Foco")+focoCard()+zh("💡","Dicas do Sistema")+'<div class="card">'+dicas()+'</div>'+zh("📝","Revisão da semana")+revCard()+zh("🏋️","Treinos");
   h+='<div class="card"><h2>Treino de hoje</h2>'+(th.length?th.map(function(x){var d=dn.indexOf(x.id)>=0;return '<div class="item" style="align-items:flex-start"><div class="t"><b>'+esc(x.emoji)+' '+esc(x.name)+'</b>'+(x.min?' <span class="mu">'+x.min+' min</span>':"")+(x.items.length?'<div class="mu">'+x.items.map(esc).join(" · ")+'</div>':"")+'</div><button class="btn'+(d?" g":"")+'" onclick="togTreino(\''+x.id+'\')">'+(d?"Concluído ✓":"Concluir +"+XPV.treino+" XP")+'</button></div>'}).join(""):'<div class="empty">Nenhum treino marcado para hoje.</div>')+'</div>'+treinoForm();
   var bl=S.books.map(bk).filter(function(b){return b.status=="lendo"});
   h+=zh("📖","Livros em andamento")+'<div class="card">'+(bl.length?bl.map(function(b){var pc=b.pages?Math.min(100,Math.round(100*b.cur/b.pages)):0;return '<div class="item" style="cursor:pointer" onclick="RB=\''+b.id+'\';go(\'livros\')"><div class="t"><b>'+esc(b.title)+'</b><div class="mu">'+(b.pages?"pág. "+b.cur+" de "+b.pages:"sem total de páginas")+' · '+b.marks.length+' marcações</div>'+(b.pages?'<div class="bar"><i style="width:'+pc+'%"></i></div>':"")+'</div></div>'}).join(""):'<div class="empty">Nenhum livro em andamento.</div><button class="btn" onclick="go(\'livros\')">Abrir a Leitura</button>')+'</div>';
@@ -811,7 +829,7 @@ function vArsenal(){
     var a=days.filter(function(d){return active(g,d)}),ok=a.filter(function(d){return gfrac(g,d)>=1}).length;
     h+='<div class="item"><div class="t"><b><span style="color:'+g.color+'">'+esc(g.emoji)+'</span> '+esc(g.name)+'</b><div class="dots">'+days.map(function(d){var f=active(g,d)?gfrac(g,d):-1;return '<span class="'+(f<0?"na":f>=1?"on":f>0?"part":"")+'"></span>'}).join("")+' <span class="mu" style="border:0;width:auto">'+(a.length?Math.round(100*ok/a.length):0)+'% da semana</span></div></div><button class="btn g" onclick="go(\'metas\');editGoal(\''+g.id+'\')">Ajustar</button></div>';
   });
-  return h+'</div>'+zh("🏅","Conquistas")+achCard();
+  return h+'</div>'+zh("📅","Calendário do mês")+calCard()+zh("🛒","Loja de recompensas")+lojaCard()+zh("🏅","Conquistas")+achCard();
 }
 
 /* tela Hoje */
@@ -822,22 +840,11 @@ function vHome(){
   var h=zh("⚡","Missão diária")+questCard()+zh("🎯","Metas de hoje")+'<div class="card">'+todayGoals(t)+'</div>';
   h+=zh("🗓️","Agenda e rotina")+'<div class="grid"><div class="card"><h2>Tarefas pendentes</h2>'+(pend.length?pend.slice(0,6).map(taskRow).join(""):'<div class="empty">Tudo em dia. 🎉</div>')+'</div><div class="card"><h2>Compromissos de hoje</h2>'+(ev.length?ev.map(evRow).join(""):'<div class="empty">Nada marcado para hoje.</div>');
   if(th.length)h+='<h2 style="margin-top:14px">Treino de hoje</h2>'+th.map(function(x){var d=dn.indexOf(x.id)>=0;return '<div class="item"><div class="t">'+esc(x.emoji)+' '+esc(x.name)+'</div><button class="btn'+(d?" g":"")+'" onclick="togTreino(\''+x.id+'\')">'+(d?"Feito ✓":"Concluir")+'</button></div>'}).join("");
-  h+='</div></div>'+zh("📈","Progresso semanal")+'<div class="grid"><div class="card"><h2>Metas cumpridas</h2>'+chart("Metas cumpridas",days.map(pctDay),lab,100,"%")+'</div><div class="card"><h2>XP por dia</h2>'+chart("XP por dia",xv,lab,Math.max.apply(null,xv.concat([1])),"")+'</div><div class="card"><h2>Tarefas concluídas</h2>'+chart("Tarefas concluídas",tc,lab,Math.max.apply(null,tc.concat([1])),"")+'</div></div>';
+  h+='</div></div>'+(new Date().getDay()==0?zh("📝","Revisão da semana")+revCard():"")+zh("📈","Progresso semanal")+'<div class="grid"><div class="card"><h2>Metas cumpridas</h2>'+chart("Metas cumpridas",days.map(pctDay),lab,100,"%")+'</div><div class="card"><h2>XP por dia</h2>'+chart("XP por dia",xv,lab,Math.max.apply(null,xv.concat([1])),"")+'</div><div class="card"><h2>Tarefas concluídas</h2>'+chart("Tarefas concluídas",tc,lab,Math.max.apply(null,tc.concat([1])),"")+'</div></div>';
   return accountCard()+h+backupCard();
 }
 
 /* liga entre amigos */
-function liga(ids){
-  var rows=ids.map(function(id){var me=id==cuid,p=me?(S.profile||{}):(GS.profs[id]||{}),s=me?myStats():(p.stats||{});return {me:me,p:p,xp:LG=="sem"?(s.wxp||0):(s.xp||0),L:lvlInfo(s.xp||0).L}}).sort(function(a,b){return b.xp-a.xp});
-  var top=Math.max(1,rows.length?rows[0].xp:1),med=["🥇","🥈","🥉"];
-  var h='<div class="card"><div class="row" style="margin-bottom:8px"><button class="chip'+(LG=="sem"?" on":"")+'" onclick="LG=\'sem\';render()">Últimos 7 dias</button><button class="chip'+(LG=="all"?" on":"")+'" onclick="LG=\'all\';render()">Geral</button></div>';
-  rows.forEach(function(r,i){var rk=rankOf(r.L);h+='<div class="lg'+(r.me?" me":"")+'"><span class="pos">'+(med[i]||i+1)+'</span>'+av(r.p,38)+'<div style="flex:1;min-width:0"><b>'+esc(r.p.name||"Sem nome")+'</b> '+emblem(rk,20)+'<div class="bar"><i style="width:'+Math.round(100*r.xp/top)+'%"></i></div></div><b>'+r.xp+' XP</b></div>'});
-  var mi=rows.findIndex(function(r){return r.me});
-  if(mi>0)h+='<div class="mu" style="margin-top:8px">Faltam '+(rows[mi-1].xp-rows[mi].xp+1)+' XP para ultrapassar '+esc(rows[mi-1].p.name||"o próximo")+'.</div>';
-  else if(mi==0&&rows.length>1)h+='<div class="mu" style="margin-top:8px">Você lidera por '+(rows[0].xp-rows[1].xp)+' XP. Mantenha a liderança!</div>';
-  return h+'</div>';
-}
-
 /* ---------- Lote 1: emblemas, efeitos, conquistas, lembretes, conta, moderação ---------- */
 var RKC={E:"#8a96ad",D:"#4cd48b",C:"#3aa0ff",B:"#a07bff",A:"#ff9a3d",S:"#ffc857",Monarca:"#ff4fd8"};
 function emblem(rk,sz){
@@ -1008,6 +1015,257 @@ function modCard(g,ids){
   return h+'</div>';
 }
 
+/* ---------- Lote 2 ---------- */
+function addDays(ds,n){var d=new Date(ds+"T12:00:00");d.setDate(d.getDate()+n);return ymd(d)}
+function monthXP(off){
+  var d=new Date(),k=new Date(d.getFullYear(),d.getMonth()+off,1),pre=k.getFullYear()+"-"+String(k.getMonth()+1).padStart(2,"0"),m=xpMap(),t=0;
+  Object.keys(m).forEach(function(x){if(x.indexOf(pre)==0)t+=m[x]});return t;
+}
+function dName(id){return esc((id==cuid?(S.profile||{}).name:(GS.profs[id]||{}).name)||"Alguém")}
+
+/* liga com temporadas mensais */
+function liga(ids){
+  var rows=ids.map(function(id){var me=id==cuid,p=me?(S.profile||{}):(GS.profs[id]||{}),s=me?myStats():(p.stats||{});return {me:me,p:p,xp:LG=="sem"?(s.wxp||0):LG=="mes"?(s.mxp||0):(s.xp||0),L:lvlInfo(s.xp||0).L,pm:s.pmxp||0}});
+  var ch=-1,cm=0;rows.forEach(function(r,i){if(r.pm>cm){cm=r.pm;ch=i}});if(ch>=0)rows[ch].champ=true;
+  rows.sort(function(a,b){return b.xp-a.xp});
+  var top=Math.max(1,rows.length?rows[0].xp:1),med=["🥇","🥈","🥉"],now=new Date(),left=new Date(now.getFullYear(),now.getMonth()+1,0).getDate()-now.getDate();
+  var h='<div class="card"><div class="row" style="margin-bottom:8px">'+[["sem","7 dias"],["mes","Temporada do mês"],["all","Geral"]].map(function(x){return '<button class="chip'+(LG==x[0]?" on":"")+'" onclick="LG=\''+x[0]+'\';render()">'+x[1]+'</button>'}).join("")+'</div>';
+  if(LG=="mes")h+='<div class="mu" style="margin-bottom:6px">Temporada de '+now.toLocaleDateString("pt-BR",{month:"long"})+': termina em '+left+' dia(s). O campeão do mês passado ganha 👑.</div>';
+  rows.forEach(function(r,i){var rk=rankOf(r.L);h+='<div class="lg'+(r.me?" me":"")+'"><span class="pos">'+(med[i]||i+1)+'</span>'+av(r.p,38)+'<div style="flex:1;min-width:0"><b>'+esc(r.p.name||"Sem nome")+'</b>'+(r.champ?" 👑":"")+' '+emblem(rk,20)+'<div class="bar"><i style="width:'+Math.round(100*r.xp/top)+'%"></i></div></div><b>'+r.xp+' XP</b></div>'});
+  var mi=rows.findIndex(function(r){return r.me});
+  if(mi>0)h+='<div class="mu" style="margin-top:8px">Faltam '+(rows[mi-1].xp-rows[mi].xp+1)+' XP para ultrapassar '+esc(rows[mi-1].p.name||"o próximo")+'.</div>';
+  else if(mi==0&&rows.length>1)h+='<div class="mu" style="margin-top:8px">Você lidera por '+(rows[0].xp-rows[1].xp)+' XP. Mantenha a liderança!</div>';
+  return h+'</div>';
+}
+
+/* meta coletiva */
+function metaGrupoCard(g,ids){
+  var gl=GS.ggoal,sum=0;
+  ids.forEach(function(i){var s=i==cuid?myStats():((GS.profs[i]||{}).stats||{});sum+=s.wxp||0});
+  var h='<div class="card"><h2>Meta coletiva da semana</h2>';
+  if(gl){var p=Math.min(100,Math.round(100*sum/gl.target));h+='<b>'+esc(gl.title)+'</b><div class="bar"><i class="'+(sum>=gl.target?"ok":"")+'" style="width:'+p+'%"></i></div><div class="mu">'+sum+' / '+gl.target+' XP somados pelo grupo nos últimos 7 dias'+(sum>=gl.target?" · Meta batida! 🎉":" · faltam "+(gl.target-sum))+'</div>'}
+  else h+='<div class="empty">Nenhuma meta coletiva definida.</div>';
+  if(g.owner==cuid)h+='<div class="row" style="margin-top:10px"><input id="ggt" class="grow" placeholder="Título (ex.: Semana da disciplina)" value="'+esc(gl?gl.title:"")+'"><input id="ggn" type="number" min="1" placeholder="XP total" style="width:110px" value="'+(gl?gl.target:"")+'"><button class="btn" onclick="ggSet()">Definir</button>'+(gl?'<button class="btn x" onclick="ggDel()">Remover</button>':"")+'</div>';
+  return h+'</div>';
+}
+async function ggSet(){
+  var t=$("ggt").value.trim(),n=Number($("ggn").value);if(!t||!(n>0)){alert("Informe o título e o total de XP.");return}
+  var r=await cloud.sb.from("group_goals").upsert({group_id:GS.cur,title:t,target:Math.round(n),created_by:cuid});
+  if(r.error){alert(r.error.message);return}await loadGroup();softRender();
+}
+async function ggDel(){await cloud.sb.from("group_goals").delete().eq("group_id",GS.cur);await loadGroup();softRender()}
+
+/* duelos */
+function duelProg(d){
+  var cx=(GS.profs[d.challenger]||{}).stats||{},ox=(GS.profs[d.opponent]||{}).stats||{};
+  var c=d.challenger==cuid?totalXP():(cx.xp||0),o=d.opponent==cuid?totalXP():(ox.xp||0);
+  return {c:Math.max(0,c-d.c_base),o:Math.max(0,o-d.o_base)};
+}
+async function duelNew(){
+  var op=$("dop").value,st=Number($("dst").value),dy=Number($("ddy").value);if(!op){alert("Escolha um oponente.");return}
+  var r=await cloud.sb.from("duels").insert({group_id:GS.cur,challenger:cuid,opponent:op,stake:st,days:dy});
+  if(r.error){alert(r.error.message);return}await loadGroup();softRender();
+}
+async function duelAnswer(id,ok){
+  var d=GS.duels.find(function(x){return x.id==id}),t=today(),sb=cloud.sb,r;
+  if(!ok)r=await sb.from("duels").update({status:"recusado"}).eq("id",id);
+  else{var cs=(GS.profs[d.challenger]||{}).stats||{};r=await sb.from("duels").update({status:"ativo",c_base:cs.xp||0,o_base:totalXP(),start_day:t,end_day:addDays(t,d.days)}).eq("id",id)}
+  if(r&&r.error){alert(r.error.message);return}await loadGroup();softRender();
+}
+async function duelCancel(id){await cloud.sb.from("duels").delete().eq("id",id);await loadGroup();softRender()}
+async function duelFinalize(){
+  var t=today(),sb=cloud.sb,did=false;
+  for(var d of (GS.duels||[])){
+    if(d.status=="ativo"&&d.end_day&&d.end_day<t&&(d.challenger==cuid||d.opponent==cuid)){
+      var p=duelProg(d),w=p.c>p.o?d.challenger:p.o>p.c?d.opponent:null;
+      try{await sb.from("duels").update({status:"fim",winner:w}).eq("id",d.id).eq("status","ativo");did=true}catch(e){}
+    }
+  }
+  if(did){var du=await sb.from("duels").select("*").eq("group_id",GS.cur).order("created_at",{ascending:false}).limit(20);GS.duels=du.data||GS.duels}
+  S.duelWon=S.duelWon||{};var ch=false;
+  (GS.duels||[]).forEach(function(d){
+    if(d.status!="fim"||S.duelWon[d.id]!==undefined||(d.challenger!=cuid&&d.opponent!=cuid))return;
+    S.duelWon[d.id]={xp:d.winner==cuid?d.stake:(!d.winner?Math.floor(d.stake/2):0),day:d.end_day||t};ch=true;
+  });
+  if(ch){save();if(Object.keys(S.duelWon).some(function(k){return S.duelWon[k].xp>0}))sys("Duelo encerrado","Veja o resultado em Duelos")}
+}
+function duelosCard(g,ids){
+  var D=GS.duels||[],others=ids.filter(function(i){return i!=cuid}),h='<div class="card">';
+  h+=others.length?'<div class="row">'+fld("Oponente",'<select id="dop">'+others.map(function(i){return '<option value="'+i+'">'+dName(i)+'</option>'}).join("")+'</select>')+fld("Aposta",'<select id="dst">'+[30,50,100,200].map(function(n){return '<option value="'+n+'">'+n+' XP</option>'}).join("")+'</select>')+fld("Duração",'<select id="ddy">'+[3,7,14].map(function(n){return '<option value="'+n+'">'+n+' dias</option>'}).join("")+'</select>')+'<div style="align-self:flex-end"><button class="btn" onclick="duelNew()">Desafiar</button></div></div><div class="mu" style="margin-top:6px">Vence quem ganhar mais XP durante o duelo. O vencedor recebe a aposta em XP; em caso de empate, cada um recebe metade.</div>':'<div class="empty">Convide mais gente para o grupo para poder desafiar alguém.</div>';
+  D.slice(0,8).forEach(function(d){
+    var line="";
+    if(d.status=="pendente")line=d.opponent==cuid?'<b>'+dName(d.challenger)+'</b> te desafiou: '+d.days+' dias, aposta de '+d.stake+' XP.<div class="row" style="margin-top:6px"><button class="btn" onclick="duelAnswer(\''+d.id+'\',true)">Aceitar</button><button class="btn g" onclick="duelAnswer(\''+d.id+'\',false)">Recusar</button></div>':'<b>'+dName(d.challenger)+'</b> desafiou <b>'+dName(d.opponent)+'</b> ('+d.days+' dias, '+d.stake+' XP). Aguardando resposta.'+(d.challenger==cuid?' <button class="btn x" onclick="duelCancel(\''+d.id+'\')">Cancelar</button>':"");
+    else if(d.status=="ativo"){var p=duelProg(d),mx=Math.max(1,p.c,p.o);line='<b>'+dName(d.challenger)+'</b> ⚔️ <b>'+dName(d.opponent)+'</b> · aposta de '+d.stake+' XP · termina em '+fmt(d.end_day)+'<div class="mu">'+dName(d.challenger)+': '+p.c+' XP</div><div class="bar"><i style="width:'+Math.round(100*p.c/mx)+'%"></i></div><div class="mu">'+dName(d.opponent)+': '+p.o+' XP</div><div class="bar"><i style="width:'+Math.round(100*p.o/mx)+'%"></i></div>'}
+    else if(d.status=="fim")line='<b>'+dName(d.challenger)+'</b> ⚔️ <b>'+dName(d.opponent)+'</b> · '+(d.winner?'🏆 '+dName(d.winner)+' venceu (+'+d.stake+' XP)':'Empate (cada um +'+Math.floor(d.stake/2)+' XP)');
+    else line='<span class="mu">'+dName(d.opponent)+' recusou o duelo de '+dName(d.challenger)+'.</span>';
+    h+='<div class="item" style="display:block">'+line+'</div>';
+  });
+  return h+'</div>';
+}
+
+/* mural com reações e comentários */
+async function gReact(pid,e){
+  var mine=(GS.reacts||[]).find(function(r){return r.post_id==pid&&r.user_id==cuid&&r.emoji==e}),r;
+  if(mine)r=await cloud.sb.from("post_reactions").delete().eq("post_id",pid).eq("user_id",cuid).eq("emoji",e);
+  else r=await cloud.sb.from("post_reactions").insert({post_id:pid,user_id:cuid,emoji:e,group_id:GS.cur});
+  if(r&&r.error){alert(r.error.message);return}await loadGroup();softRender();
+}
+function gCm(pid){GS.cm=GS.cm==pid?null:pid;render()}
+async function gComment(pid){
+  var t=$("gc"+pid).value.trim();if(!t)return;
+  var r=await cloud.sb.from("posts").insert({group_id:GS.cur,user_id:cuid,text:t,parent_id:pid});
+  if(r.error){alert(r.error.message);return}GS.cm=pid;await loadGroup();softRender();
+}
+function postsHtml(g){
+  var top=GS.posts.filter(function(x){return !x.parent_id});
+  if(!top.length)return '<div class="empty">Nenhum recado ainda. Seja o primeiro!</div>';
+  return top.map(function(x){
+    var p=x.user_id==cuid?Object.assign({},S.profile||{}):(GS.profs[x.user_id]||{}),rs=(GS.reacts||[]).filter(function(r){return r.post_id==x.id}),cm=GS.posts.filter(function(c){return c.parent_id==x.id}).reverse();
+    var b='<div class="item" style="align-items:flex-start">'+av(p,36)+'<div class="t"><b>'+esc(p.name||"Alguém")+'</b> <span class="mu">'+new Date(x.created_at).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})+'</span>'+(x.text?'<div style="white-space:pre-wrap">'+esc(x.text)+'</div>':"")+(x.photo&&GS.urls[x.photo]?'<img class="ph" loading="lazy" src="'+esc(GS.urls[x.photo])+'" alt="Foto do mural">':"");
+    b+='<div class="row" style="margin-top:6px;gap:6px">'+["❤️","🔥","👏"].map(function(e){var n=rs.filter(function(r){return r.emoji==e}).length,me=rs.some(function(r){return r.emoji==e&&r.user_id==cuid});return '<button class="chip'+(me?" on":"")+'" onclick="gReact(\''+x.id+'\',\''+e+'\')">'+e+(n?" "+n:"")+'</button>'}).join("")+'<button class="chip" onclick="gCm(\''+x.id+'\')">💬 '+cm.length+'</button></div>';
+    cm.forEach(function(c){var cp=c.user_id==cuid?(S.profile||{}):(GS.profs[c.user_id]||{});b+='<div class="cmt"><b>'+esc(cp.name||"Alguém")+'</b> '+esc(c.text)+' '+postBtns(c,g)+'</div>'});
+    if(GS.cm==x.id)b+='<div class="row" style="margin-top:6px"><input id="gc'+x.id+'" class="grow" placeholder="Escreva um comentário..."><button class="btn" onclick="gComment(\''+x.id+'\')">Enviar</button></div>';
+    return b+'</div>'+postBtns(x,g)+'</div>';
+  }).join("");
+}
+
+/* revisão semanal */
+function weekStart(){var d=new Date();d.setDate(d.getDate()-((d.getDay()+6)%7));return ymd(d)}
+function winDays(off){var a=[];for(var i=6;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i-7*off);a.push(ymd(d))}return a}
+function winStats(off){
+  var D=winDays(off),xm=xpMap(),pct=D.map(pctDay),xp=0,pg=0,tr=0,tk=0,ac=[];
+  D.forEach(function(d,i){xp+=xm[d]||0;pg+=pagesOn(d);tr+=((S.tlog&&S.tlog[d])||[]).length;tk+=S.tasks.filter(function(x){return x.done==d}).length;if(S.goals.some(function(g){return active(g,d)}))ac.push(i)});
+  return {D:D,pct:pct,ac:ac,avg:ac.length?Math.round(ac.reduce(function(s,i){return s+pct[i]},0)/ac.length):0,xp:xp,pg:pg,tr:tr,tk:tk};
+}
+function arrow(a,b){return a>b?'<span style="color:var(--ok)">▲ '+(a-b)+'</span>':a<b?'<span style="color:var(--dg)">▼ '+(b-a)+'</span>':'<span class="mu">igual</span>'}
+function saveRev(){
+  var t=$("rvt").value.trim(),wk=weekStart();S.revs=S.revs||{};
+  var first=!S.revs[wk];S.revs[wk]={t:t,d:(S.revs[wk]&&S.revs[wk].d)||today()};save();
+  if(first)sys("Revisão salva","+"+XPV.revisao+" XP");render();
+}
+function revCard(){
+  var a=winStats(0),b=winStats(1),wk=weekStart(),R=(S.revs&&S.revs[wk])||null,best=-1,worst=-1;
+  a.ac.forEach(function(i){if(best<0||a.pct[i]>a.pct[best])best=i;if(worst<0||a.pct[i]<a.pct[worst])worst=i});
+  var gr=S.goals.map(function(g){var ds=a.D.filter(function(d){return active(g,d)});return {g:g,r:ds.length?ds.filter(function(d){return g.type=="max"?gdone(g,d):gfrac(g,d)>=1}).length/ds.length:null}}).filter(function(x){return x.r!==null}).sort(function(p,q){return q.r-p.r});
+  var dn=function(i){return DN[new Date(a.D[i]+"T12:00:00").getDay()]};
+  var h='<div class="card"><h2>Últimos 7 dias</h2><div class="row" style="gap:18px"><div><div class="mu">Metas cumpridas (média)</div><b>'+a.avg+'%</b> '+arrow(a.avg,b.avg)+'</div><div><div class="mu">XP</div><b>'+a.xp+'</b> '+arrow(a.xp,b.xp)+'</div><div><div class="mu">Páginas</div><b>'+a.pg+'</b> '+arrow(a.pg,b.pg)+'</div><div><div class="mu">Treinos</div><b>'+a.tr+'</b> '+arrow(a.tr,b.tr)+'</div><div><div class="mu">Tarefas</div><b>'+a.tk+'</b> '+arrow(a.tk,b.tk)+'</div></div>';
+  h+='<div style="margin-top:12px">';
+  if(best>=0)h+='<div class="tip"><span>🏆</span><div><b>Melhor dia: '+dn(best)+'</b><span class="mu">'+a.pct[best]+'% das metas.</span></div></div><div class="tip"><span>🪫</span><div><b>Dia mais fraco: '+dn(worst)+'</b><span class="mu">'+a.pct[worst]+'% das metas.</span></div></div>';
+  if(gr.length){h+='<div class="tip"><span>🎯</span><div><b>Meta mais forte: '+esc(gr[0].g.name)+'</b><span class="mu">'+Math.round(gr[0].r*100)+'% dos dias.</span></div></div>';var w=gr[gr.length-1];if(gr.length>1&&w.r<.6)h+='<div class="tip"><span>🧭</span><div><b>Foco da próxima semana: '+esc(w.g.name)+'</b><span class="mu">Só '+Math.round(w.r*100)+'% dos dias. Reduza a meta ou escolha um horário fixo para ela.</span></div></div>'}
+  h+='<div class="tip"><span>🚀</span><div><b>Objetivo de XP: '+(Math.round((a.xp*1.1+10)/10)*10)+'</b><span class="mu">Cerca de 10% a mais que nesta semana.</span></div></div></div>';
+  h+='<label class="lb">Minha intenção para a próxima semana</label><textarea id="rvt" style="min-height:70px" placeholder="O que você quer melhorar?">'+esc(R?R.t:"")+'</textarea><div class="row" style="margin-top:8px"><button class="btn" onclick="saveRev()">'+(R?"Atualizar revisão":"Salvar revisão (+"+XPV.revisao+" XP)")+'</button>'+(R?'<span class="mu">Revisão salva em '+fmt(R.d)+' ✓</span>':"")+'</div></div>';
+  return h;
+}
+
+/* calendário com mapa de calor */
+var CAL=0,CSEL=null;
+function calCard(){
+  var now=new Date(),base=new Date(now.getFullYear(),now.getMonth()+CAL,1),y=base.getFullYear(),m=base.getMonth(),n=new Date(y,m+1,0).getDate(),first=base.getDay(),t=today(),xm=xpMap(),i,d;
+  var h='<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><button class="chip" onclick="CAL--;render()">◀</button><b style="text-transform:capitalize">'+base.toLocaleDateString("pt-BR",{month:"long",year:"numeric"})+'</b><button class="chip" onclick="CAL++;render()">▶</button></div><div class="cal">'+DN.map(function(x){return '<span class="ch">'+x[0]+'</span>'}).join("");
+  for(i=0;i<first;i++)h+='<span></span>';
+  for(d=1;d<=n;d++){
+    var ds=y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0"),fut=ds>t,p=fut?0:pctDay(ds),ev=S.events.some(function(e){return e.date==ds});
+    h+='<button class="cd'+(ds==t?" td":"")+(ds==CSEL?" sel":"")+(fut?" fu":"")+'" style="background:color-mix(in srgb,var(--ok) '+Math.round(p*.8)+'%,transparent)" onclick="CSEL=\''+ds+'\';render()" title="'+fmt(ds)+': '+p+'% das metas">'+d+(ev?'<i></i>':"")+'</button>';
+  }
+  h+='</div><div class="mu" style="margin-top:6px">Quanto mais verde, mais metas cumpridas no dia. O ponto marca compromissos.</div>';
+  if(CSEL){
+    var gs=S.goals.filter(function(g){return active(g,CSEL)}),evs=S.events.filter(function(e){return e.date==CSEL});
+    h+='<div style="margin-top:10px"><b>'+fmt(CSEL)+'</b> · '+pctDay(CSEL)+'% das metas · '+(xm[CSEL]||0)+' XP<div class="mu">'+(gs.length?gs.map(function(g){return (gdone(g,CSEL)?"✅ ":"⬜ ")+esc(g.name)}).join(" · "):"Sem metas neste dia.")+'</div>'+(evs.length?'<div class="mu">📅 '+evs.map(function(e){return esc(e.title)+(e.time?" ("+e.time+")":"")}).join(" · ")+'</div>':"")+'</div>';
+  }
+  return h+'</div>';
+}
+
+/* loja de recompensas */
+function saldo(){var g=0;(S.resg||[]).forEach(function(r){g+=r.cost});return totalXP()-g}
+function lojaAdd(){
+  var n=$("ln").value.trim(),c=Number($("lc").value);if(!n||!(c>0)){alert("Informe o prêmio e o custo em XP.");return}
+  S.loja=S.loja||[];S.loja.push({id:uid(),name:n,cost:Math.round(c),emoji:($("le").value.trim()||"🎁")});save();render();
+}
+function lojaSug(){
+  S.loja=S.loja||[];
+  [["📺","Um episódio de série",80],["🍰","Uma sobremesa",150],["🎮","1 hora de jogo",100],["😴","Um descanso extra",200]].forEach(function(x){if(!S.loja.some(function(y){return y.name==x[1]}))S.loja.push({id:uid(),emoji:x[0],name:x[1],cost:x[2]})});
+  save();render();
+}
+function lojaBuy(id){
+  var r=(S.loja||[]).find(function(x){return x.id==id});
+  if(!r||saldo()<r.cost){alert("XP insuficiente.");return}
+  if(!confirm("Resgatar “"+r.name+"” por "+r.cost+" XP?"))return;
+  S.resg=S.resg||[];S.resg.unshift({id:uid(),name:r.name,cost:r.cost,date:today()});save();sys("Recompensa resgatada",r.emoji+" "+r.name);render();
+}
+function lojaDel(id){S.loja=S.loja.filter(function(x){return x.id!=id});save();render()}
+function lojaCard(){
+  var L=S.loja||[],sd=saldo(),h='<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Saldo</h2><b class="big">'+sd+' XP</b></div><div class="mu" style="margin-bottom:8px">Gastar XP não reduz o seu nível. Você define os prêmios e o preço de cada um.</div>';
+  h+=L.length?L.map(function(r){return '<div class="item"><div class="t"><b>'+esc(r.emoji)+' '+esc(r.name)+'</b><div class="mu">'+r.cost+' XP</div></div><button class="btn'+(sd>=r.cost?"":" g")+'" '+(sd>=r.cost?"":"disabled")+' onclick="lojaBuy(\''+r.id+'\')">Resgatar</button><button class="btn x" onclick="lojaDel(\''+r.id+'\')">✕</button></div>'}).join(""):'<div class="empty">Nenhuma recompensa ainda.</div><button class="btn g" onclick="lojaSug()">Adicionar sugestões</button>';
+  h+='<div class="row" style="margin-top:10px"><input id="le" placeholder="🎁" style="width:56px;text-align:center"><input id="ln" class="grow" placeholder="Novo prêmio"><input id="lc" type="number" min="1" placeholder="Custo (XP)" style="width:120px"><button class="btn" onclick="lojaAdd()">Criar</button></div>';
+  var hist=(S.resg||[]).slice(0,5);
+  if(hist.length)h+='<h2 style="margin-top:14px">Últimos resgates</h2>'+hist.map(function(r){return '<div class="mu">'+fmt(r.date)+' · '+esc(r.name)+' (−'+r.cost+' XP)</div>'}).join("");
+  return h+'</div>';
+}
+
+/* foco */
+var FT=null;try{FT=JSON.parse(localStorage.getItem("planner_foco")||"null")}catch(e){}
+function fmtMS(ms){var s=Math.max(0,Math.ceil(ms/1000)),m=Math.floor(s/60);return String(m).padStart(2,"0")+":"+String(s%60).padStart(2,"0")}
+function focoStart(min){FT={end:Date.now()+min*60000,min:min,label:($("fl")||{}).value||""};try{localStorage.setItem("planner_foco",JSON.stringify(FT))}catch(e){}render()}
+function focoCancel(){FT=null;try{localStorage.removeItem("planner_foco")}catch(e){}document.title="Meu Planner";render()}
+function focoTick(){
+  if(!FT)return;
+  var left=FT.end-Date.now(),e=$("ftime");
+  if(left<=0){
+    var m=FT.min;FT=null;try{localStorage.removeItem("planner_foco")}catch(x){}
+    S.foco=S.foco||{};S.foco[today()]=(S.foco[today()]||0)+m;save();document.title="Meu Planner";
+    notify("Foco concluído","+"+Math.floor(m/5)*XPV.foco+" XP · respire um pouco antes da próxima");render();return;
+  }
+  if(e)e.textContent=fmtMS(left);document.title=fmtMS(left)+" · Foco";
+}
+function focoCard(){
+  var hj=(S.foco&&S.foco[today()])||0;
+  if(FT)return '<div class="card"><h2>Foco em andamento</h2><div class="big" id="ftime" style="text-align:center;font-size:3rem">'+fmtMS(FT.end-Date.now())+'</div><div class="mu" style="text-align:center">'+esc(FT.label||"Sessão de foco")+'</div><div class="row" style="justify-content:center;margin-top:10px"><button class="btn g" onclick="focoCancel()">Cancelar</button></div></div>';
+  return '<div class="card"><h2>Sessão de foco</h2><div class="row"><input id="fl" class="grow" placeholder="No que você vai focar? (opcional)">'+[15,25,45,60].map(function(n){return '<button class="btn" onclick="focoStart('+n+')">'+n+' min</button>'}).join("")+'</div><div class="mu" style="margin-top:8px">Hoje: '+hj+' min de foco · cada 5 min rendem +'+XPV.foco+' XP</div></div>';
+}
+
+/* tutorial */
+var TOUR=[["⚡","Bem-vindo, Caçador","O Planner transforma a sua rotina em um sistema de evolução: metas, missões, XP e níveis."],["🎯","Metas","Crie metas na aba Metas: quantidade, tempo, feito ou não feito, limite máximo ou checklist. Cumpra todos os dias."],["📜","Missão diária","Todo dia o Sistema monta uma missão com base nas suas metas. Cumpra tudo e ganhe XP extra."],["⚔️","Arsenal","Treinos, foco, livros, calendário, loja de recompensas, conquistas e dicas personalizadas ficam no Arsenal."],["👥","Grupo e Liga","Crie um grupo de até 8 pessoas, compare o XP na Liga, faça duelos e deixe recados no mural."],["📲","Instale no celular","No menu do navegador, escolha Adicionar à tela inicial. Ative os lembretes no Perfil."]];
+function tourShow(i){
+  var e=$("tour");if(!e){e=document.createElement("div");e.id="tour";document.body.appendChild(e)}
+  if(i>=TOUR.length){tourEnd();return}
+  var t=TOUR[i];
+  e.innerHTML='<div class="tbox"><div class="ti">'+t[0]+'</div><h3>'+esc(t[1])+'</h3><p>'+esc(t[2])+'</p><div class="row" style="justify-content:center"><button class="btn g" onclick="tourEnd()">Pular</button><button class="btn" onclick="tourShow('+(i+1)+')">'+(i==TOUR.length-1?"Começar":"Próximo")+'</button></div><div class="mu" style="margin-top:8px">'+(i+1)+' / '+TOUR.length+'</div></div>';
+  e.className="on";
+}
+function tourEnd(){var e=$("tour");if(e)e.className="";S.profile=S.profile||{};if(!S.profile.tour){S.profile.tour=1;save()}}
+function tourBtn(){return '<div class="card"><h2>Ajuda</h2><button class="btn g" onclick="tourShow(0)">Rever o tutorial</button></div>'}
+
+/* backup automático semanal (na conta) */
+async function autoBackup(){
+  var sb=cloud.sb,me=cuid;if(!sb||!me)return;
+  try{
+    var r=await sb.from("planner_backups").select("id,day").eq("user_id",me).order("day",{ascending:false}).limit(10);
+    if(r.error)return;
+    var L=r.data||[],last=L[0]&&L[0].day;
+    if(!last||(new Date(today())-new Date(last))/864e5>=7){
+      var ins=await sb.from("planner_backups").insert({user_id:me,day:today(),data:JSON.parse(JSON.stringify(S))});
+      if(ins.error)return;
+      L.slice(3).forEach(function(x){sb.from("planner_backups").delete().eq("id",x.id)});
+    }
+  }catch(e){}
+}
+async function loadBackups(){
+  if(!cloud.sb||!cuid)return;
+  try{var r=await cloud.sb.from("planner_backups").select("id,day").eq("user_id",cuid).order("day",{ascending:false}).limit(4);GS.bks=r.data||[]}catch(e){GS.bks=[]}
+  softRender();
+}
+async function bkRestore(id){
+  if(!confirm("Restaurar este backup substitui os dados atuais. Continuar?"))return;
+  var r=await cloud.sb.from("planner_backups").select("data").eq("id",id).maybeSingle();
+  if(r.error||!r.data){alert("Não consegui abrir o backup.");return}
+  S=Object.assign({goals:[],log:{},tasks:[],events:[],diary:[],books:[]},r.data.data);S.goals=S.goals.map(norm);save();render();alert("Backup restaurado.");
+}
+function backupsCard(){
+  if(!cloud.email)return "";
+  var L=GS.bks||[];
+  return '<div class="card"><h2>Backups automáticos</h2><div class="mu" style="margin-bottom:6px">A cada 7 dias o Planner guarda uma cópia na sua conta (mantém as 4 mais recentes).</div>'+(L.length?L.map(function(b){return '<div class="item"><div class="t">Backup de '+fmt(b.day)+'</div><button class="btn g" onclick="bkRestore(\''+b.id+'\')">Restaurar</button></div>'}).join(""):'<div class="empty">Nenhum backup ainda.</div>')+'</div>';
+}
+
 /* ---------- Backup ---------- */
 function dl(name,text){var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));a.download=name;document.body.appendChild(a);a.click();a.remove()}
 function b64(blob){return new Promise(function(ok){var r=new FileReader();r.onload=function(){ok(r.result)};r.readAsDataURL(blob)})}
@@ -1064,6 +1322,8 @@ render();
 if("serviceWorker" in navigator&&location.protocol.indexOf("http")==0)navigator.serviceWorker.register("sw.js").catch(function(){});
 window.addEventListener("online",function(){if(cloud.ref&&S.rev>(cloud.synced||0))cloudPush()});
 setInterval(checkReminders,30000);
+setInterval(focoTick,1000);
+setTimeout(function(){if(!(S.profile&&S.profile.tour))tourShow(0)},1500);
 </script>
 </body>
 </html>
